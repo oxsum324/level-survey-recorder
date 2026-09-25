@@ -83,3 +83,22 @@ test('decimal comma from a mobile keyboard is accepted', () => {
   project.setups[0].bs = '0,595';
   assert.equal(calculate(project).rawEndHeight.toFixed(3), '86.653');
 });
+
+test('each S point may carry the previous foresight and next backsight', () => {
+  const project = {
+    points: ['BM1', 'S1', 'S2'].map(code => ({ id: code, code, type: code === 'BM1' ? 'BM' : 'S' })),
+    route: { startId: 'BM1', endId: 'BM1', startHeight: '100.000', toleranceMm: '5', adjustMethod: 'stations' },
+    setups: [
+      { bsPointId: 'BM1', bs: '1.000', intermediate: [], fsPointId: 'S1', fs: '1.500' },
+      { bsPointId: 'S1', bs: '0.600', intermediate: [], fsPointId: 'S2', fs: '0.900' },
+      { bsPointId: 'S2', bs: '1.400', intermediate: [], fsPointId: 'BM1', fs: '0.600' },
+    ],
+  };
+  const result = calculate(project);
+  assert.equal(result.complete, true);
+  assert.equal(result.rawEndHeight.toFixed(3), '100.000');
+  assert.equal(result.stations[0].rawEndHeight.toFixed(3), '99.500');
+  assert.equal(result.stations[1].rawEndHeight.toFixed(3), '99.200');
+  assert.equal(result.stations[1].bsPointId, result.stations[0].fsPointId);
+  assert.equal(result.stations[2].bsPointId, result.stations[1].fsPointId);
+});

@@ -68,7 +68,7 @@ function blobAsDataUrl(blob) {
 }
 
 export async function makeBackup(project) {
-  const ids = new Set([project.mapMediaId, ...(project.photos || []).map(photo => photo.mediaId)].filter(Boolean));
+  const ids = new Set([project.mapMediaId, ...(project.photos || []).map(photo => photo.mediaId), ...(project.equipmentPhotos || []).map(photo => photo.mediaId)].filter(Boolean));
   const media = [];
   for (const id of ids) {
     const blob = await loadMedia(id);
@@ -84,7 +84,7 @@ export function parseBackup(contents) {
     throw new Error('不是此版水準測量案件檔。');
   }
   const project = backup.project;
-  if (!Array.isArray(project.points) || !Array.isArray(project.setups) || !Array.isArray(project.photos) || !project.route) {
+  if (!Array.isArray(project.points) || !Array.isArray(project.setups) || !Array.isArray(project.photos) || (project.equipmentPhotos !== undefined && !Array.isArray(project.equipmentPhotos)) || !project.route) {
     throw new Error('案件資料結構不完整。');
   }
   const ids = new Set();
@@ -98,7 +98,7 @@ export function parseBackup(contents) {
     if (bytes.byteLength > 60 * 1024 * 1024) throw new Error('單張圖像超過 60 MB。');
     return { id: item.id, blob: new Blob([bytes], { type: prefix.slice(5, -7) }) };
   });
-  for (const id of [project.mapMediaId, ...project.photos.map(photo => photo.mediaId)].filter(Boolean)) {
+  for (const id of [project.mapMediaId, ...project.photos.map(photo => photo.mediaId), ...(project.equipmentPhotos || []).map(photo => photo.mediaId)].filter(Boolean)) {
     if (!ids.has(id)) throw new Error('案件缺少圖面或照片原檔。');
   }
   return { project, media };

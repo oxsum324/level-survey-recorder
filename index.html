@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#164348">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <title>水準測量現場紀錄 V0.1.0</title>
+  <title>水準測量現場紀錄 V0.2.0</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.1.0</span></h1></div><span id="saveState" role="status">載入中</span></header>
+  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.2.0</span></h1></div><span id="saveState" role="status">載入中</span></header>
   <nav class="tabs" aria-label="工作項目"><button data-tab="route" class="active">① 測線與點位</button><button data-tab="measure">② 現場讀數</button><button data-tab="photos">③ 照片與成果</button></nav>
   <main>
     <section id="routePanel" class="tab-panel">
@@ -38,16 +38,20 @@
       <div class="toolbar bottom"><button id="exportBackup" type="button">匯出完整案件檔</button><label class="file-button">開啟案件檔<input id="importBackup" type="file" accept=".json,application/json" hidden></label><button id="newCase" type="button" class="danger">建立新案件</button></div>
     </section>
     <section id="measurePanel" class="tab-panel" hidden>
-      <div class="section-head"><h2>逐站觀測</h2><p id="routeSummary"></p></div>
+      <div class="section-head"><h2>逐點觀測</h2><p id="routeSummary"></p><p>每一點選「中間視」或「前視」。換站時，前視點會接續成下一站的後視點，兩個讀數顯示在同一列。</p></div>
       <div id="stationList"></div>
       <div class="toolbar bottom"><button id="addStation" type="button" class="primary">＋ 新增測站</button><button id="quickS" type="button">＋ 新增 S 點</button><button id="quickTP" type="button">＋ 新增 TP 點</button></div>
       <div class="card result-card"><h2>即時計算與閉合檢核</h2><div id="resultSummary"></div><div id="resultTable"></div><p id="resultNote" class="note"></p></div>
     </section>
     <section id="photosPanel" class="tab-panel" hidden>
+      <div class="section-head"><h2>設備照片</h2><p>公司設備參考照與本案現場拍攝照片分開記錄。</p></div>
+      <div class="photo-grid"><article class="photo-card reference-photo"><div class="photo-preview"><img src="./equipment/pentax-ap-128-source.png" alt="PENTAX AP-128 水準儀，公司提供之設備參考照"></div><div class="photo-body"><strong>PENTAX AP-128 水準儀</strong><small>公司提供之設備參考照（原圖保留）</small><p class="note">供型號辨識；不代表本案測量當日拍攝。</p></div></article></div>
+      <div class="card grid two"><label>本案設備照片說明<input id="equipmentDescription" maxlength="300" placeholder="例如 儀器編號、架設位置與拍攝時間"></label><div class="toolbar"><label class="file-button primary">拍攝本案設備<input id="equipmentFile" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden></label><label class="file-button">從相簿／檔案選擇<input id="equipmentGallery" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div></div>
+      <div id="equipmentPhotoList" class="photo-grid"></div>
       <div class="section-head"><h2>點位照片與成果</h2><p>每張照片連到一個點位，並保留原始圖檔。</p></div>
       <div class="card grid two"><label>照片對應點位<select id="photoPoint"></select></label><label>位置說明<input id="photoDescription" maxlength="300" placeholder="例如 圍牆轉角處鋼釘；水準尺底端所在點"></label><label class="file-button primary">開啟相機拍照<input id="photoFile" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden></label><label class="file-button">從相簿／檔案選擇<input id="photoGallery" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div>
       <div id="photoList" class="photo-grid"></div>
-      <div class="card"><h2>成果交付</h2><p class="note">列印內容含點位圖、原始讀數、閉合檢核、改正後高程及照片。另請匯出完整案件檔保存可編輯資料及原始圖檔。</p><button id="printReport" type="button" class="primary">列印／另存 PDF</button><button id="exportBackup2" type="button">匯出完整案件檔</button></div>
+      <div class="card"><h2>成果交付</h2><p class="note">列印內容含點位圖、原始讀數、閉合檢核、改正後高程、點位照片及設備照片。公司設備參考照會註明來源與性質；另請匯出完整案件檔保存可編輯資料及本案圖像原檔。</p><button id="printReport" type="button" class="primary">列印／另存 PDF</button><button id="exportBackup2" type="button">匯出完整案件檔</button></div>
     </section>
   </main>
   <div id="message" role="alert" hidden></div>

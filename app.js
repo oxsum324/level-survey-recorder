@@ -22,7 +22,7 @@ function blankProject() {
   const bm = { id: uid(), code: 'BM1', type: 'BM', description: '', position: null };
   return {
     schema: 1, appVersion: VERSION, id: uid(), name: '', number: '', date: new Date().toISOString().slice(0, 10),
-    observer: '', instrument: DEFAULT_INSTRUMENT, instrumentDefaultApplied: true, datum: '', points: [bm], mapMediaId: null, mapSource: '', photos: [], equipmentPhotos: [],
+    observer: '', instrument: DEFAULT_INSTRUMENT, instrumentDefaultApplied: true, datum: '', approxLocation: '', points: [bm], mapMediaId: null, mapSource: '', photos: [], equipmentPhotos: [],
     route: { startId: bm.id, endId: bm.id, startHeight: '', endHeight: '', toleranceMm: '', adjustMethod: 'stations' },
     setups: [], routeHistory: [], updatedAt: new Date().toISOString(),
   };
@@ -48,6 +48,13 @@ function notify(message, danger = false) {
   box.hidden = false;
   clearTimeout(box._timer);
   box._timer = setTimeout(() => { box.hidden = true; }, 7000);
+}
+
+function updateGoogleMapsLink() {
+  const location = (project.approxLocation || '').trim();
+  $('#openGoogleMaps').href = location
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`
+    : 'https://www.google.com/maps';
 }
 
 function queueSave(immediate = false) {
@@ -284,7 +291,8 @@ async function addImage(file, usage) {
         renderPoints();
         await renderMap();
         if (previous) await deleteMedia(previous);
-        notify('底圖已匯入；請重新放置點位。');
+        notify('底圖已匯入；請填來源及截圖日期，再放置點位。');
+        if (!project.mapSource) $('#mapSource').focus();
       } catch (error) {
         project.mapMediaId = previous;
         project.points.forEach((item, index) => { item.position = previousPositions[index]; });
@@ -363,6 +371,8 @@ function renderAll() {
   $('#observer').value = project.observer || '';
   $('#instrument').value = project.instrument || '';
   $('#datum').value = project.datum || '';
+  $('#approxLocation').value = project.approxLocation || '';
+  updateGoogleMapsLink();
   $('#startHeight').value = project.route.startHeight || '';
   $('#endHeight').value = project.route.endHeight || '';
   $('#toleranceMm').value = project.route.toleranceMm || '';
@@ -372,11 +382,12 @@ function renderAll() {
 }
 
 function handleRouteInput(event) {
-  const mapping = { caseName: 'name', caseNo: 'number', surveyDate: 'date', observer: 'observer', instrument: 'instrument', datum: 'datum', mapSource: 'mapSource' };
+  const mapping = { caseName: 'name', caseNo: 'number', surveyDate: 'date', observer: 'observer', instrument: 'instrument', datum: 'datum', approxLocation: 'approxLocation', mapSource: 'mapSource' };
   const routeMapping = { startHeight: 'startHeight', endHeight: 'endHeight', toleranceMm: 'toleranceMm', adjustMethod: 'adjustMethod' };
   if (mapping[event.target.id]) project[mapping[event.target.id]] = event.target.value;
   else if (routeMapping[event.target.id]) project.route[routeMapping[event.target.id]] = event.target.value;
   else return false;
+  if (event.target.id === 'approxLocation') updateGoogleMapsLink();
   renderResult(); queueSave();
   return true;
 }
@@ -580,6 +591,24 @@ function bindActions() {
     renderPoints(); queueSave(true);
   };
   $('#mapFile').onchange = event => { addImage(event.target.files[0], 'map'); event.target.value = ''; };
+  $('#pasteMap').onclick = async () => {
+    try {
+      if (!navigator.clipboard?.read) throw new Error('此瀏覽器不支援直接讀取剪貼簿');
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find(value => ['image/png', 'image/jpeg', 'image/webp'].includes(value));
+        if (type) { await addImage(await item.getType(type), 'map'); return; }
+      }
+      notify('剪貼簿沒有可貼入的圖片；請先擷取地圖畫面。', true);
+    } catch (error) { notify(`無法直接讀取剪貼簿：${error.message}。請在本頁按 Ctrl+V，或匯入圖片檔。`, true); }
+  };
+  document.addEventListener('paste', event => {
+    if ($('#routePanel').hidden) return;
+    const image = [...(event.clipboardData?.items || [])].find(item => ['image/png', 'image/jpeg', 'image/webp'].includes(item.type));
+    if (!image) return;
+    event.preventDefault();
+    addImage(image.getAsFile(), 'map');
+  });
   $('#photoFile').onchange = event => { addImage(event.target.files[0], 'photo'); event.target.value = ''; };
   $('#photoGallery').onchange = event => { addImage(event.target.files[0], 'photo'); event.target.value = ''; };
   $('#equipmentFile').onchange = event => { addImage(event.target.files[0], 'equipment'); event.target.value = ''; };
@@ -615,7 +644,7 @@ async function printReport() {
   report.id = 'printPanel';
   report.innerHTML = `<header class="print-title"><small>水準測量現場紀錄 V${VERSION}</small><h1>${safe(project.name || '水準測量成果')}</h1><p>案件編號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}　觀測者：${safe(project.observer || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p></header>
     <h2>一、測線與點位</h2><p>測線：${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}；起點已知高程：${formatHeight(result.startHeight)} m；終點已知高程：${formatHeight(result.endHeight)} m。</p>
-    <p>底圖來源：${safe(project.mapSource || '未填')}。位置圖僅供示意，不作測線長度量測。</p>${map}
+    <p>約略地址／路名：${safe(project.approxLocation || '未填')}。底圖來源：${safe(project.mapSource || '未填')}。位置圖僅供示意，不作測線長度量測。</p>${map}
     <table class="point-print-table"><thead><tr><th>點號</th><th>類別</th><th>位置說明</th></tr></thead><tbody>${project.points.map(item => `<tr><td>${safe(item.code)}</td><td>${safe(item.type)}</td><td>${safe(item.description || '—')}</td></tr>`).join('')}</tbody></table>
     <h2>二、原始讀數與高程成果</h2>${printTable(result)}
     <p>後視合計 ${formatHeight(result.sumBS)} m；前視合計 ${formatHeight(result.sumFS)} m；實測終點高程 ${formatHeight(result.rawEndHeight)} m；閉合差 ${formatMm(result.closureMm)} mm。</p>

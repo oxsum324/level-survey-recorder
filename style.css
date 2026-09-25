@@ -10,3 +10,5 @@
 @media(max-width:750px){.reading-row{grid-template-columns:1fr 1fr}.reading-row .reading-role,.reading-row .reading-actions,.turn-row .note{grid-column:1/-1}.reading-row label{min-width:0}.turn-row label:nth-of-type(3){grid-column:1/-1}}
 
 .turn-row>button{grid-column:2/-1;justify-self:start}@media(max-width:750px){.turn-row>button{grid-column:1/-1}}
+
+.location-toolbar{margin:.85rem 0}.location-toolbar a{min-height:42px;text-decoration:none}.location-toolbar+.note{margin:.4rem 0}

@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#164348">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <title>水準測量現場紀錄 V0.2.0</title>
+  <title>水準測量現場紀錄 V0.3.0</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.2.0</span></h1></div><span id="saveState" role="status">載入中</span></header>
+  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.3.0</span></h1></div><span id="saveState" role="status">載入中</span></header>
   <nav class="tabs" aria-label="工作項目"><button data-tab="route" class="active">① 測線與點位</button><button data-tab="measure">② 現場讀數</button><button data-tab="photos">③ 照片與成果</button></nav>
   <main>
     <section id="routePanel" class="tab-panel">
@@ -34,7 +34,8 @@
       </div>
       <p class="note">容許值及分配方式須由案件指定。沒有已知終點高程或未完成測線時，只顯示暫算高程；超限時不產生改正後高程。</p>
       <div class="section-head"><h2>點位與平面圖</h2><p>點號和觀測角色分開：S 點也可作前視、後視轉點。</p></div>
-      <div class="card"><div class="toolbar"><button id="addBM" type="button">＋ BM</button><button id="addS" type="button">＋ S</button><button id="addTP" type="button">＋ TP</button><label class="file-button">匯入位置圖<input id="mapFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div><p id="mapHint" class="note">新增點位並選擇「放到圖上」，再點圖面位置。底圖僅供位置示意，不以圖上距離計算測線長度。使用網路截圖時請保留原有來源標示。</p><div id="mapFrame" class="map-frame"><div id="mapEmpty">尚未匯入位置圖</div><img id="mapImage" alt="案件位置圖" hidden><div id="mapMarkers"></div></div><label>底圖來源／截圖日期<input id="mapSource" maxlength="240" placeholder="例如 Google Maps，截圖日期 2026-09-25；保留原圖標示"></label><div id="pointList" class="point-list"></div></div>
+      <div class="card"><h3>尋找作業範圍</h3><label>約略地址／路名<input id="approxLocation" maxlength="160" placeholder="例如 高雄市○○路與○○街口"></label><div class="toolbar location-toolbar"><a id="openGoogleMaps" class="file-button" href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer">在 Google 地圖搜尋並選範圍</a><button id="pasteMap" type="button">貼入剪貼簿圖片</button><label class="file-button">匯入位置圖<input id="mapFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div><p class="note">在 Google 地圖選好範圍後，擷取畫面並回到本頁按 Ctrl+V，或按「貼入剪貼簿圖片」。手機可用「匯入位置圖」選擇截圖。請保留地圖原有來源標示，並填寫底圖來源及截圖日期。</p></div>
+      <div class="card"><div class="toolbar"><button id="addBM" type="button">＋ BM</button><button id="addS" type="button">＋ S</button><button id="addTP" type="button">＋ TP</button></div><p id="mapHint" class="note">新增點位並選擇「放到圖上」，再點圖面位置。底圖僅供位置示意，不以圖上距離計算測線長度。</p><div id="mapFrame" class="map-frame" tabindex="0" aria-label="案件位置圖與點位標記"><div id="mapEmpty">尚未匯入位置圖</div><img id="mapImage" alt="案件位置圖" hidden><div id="mapMarkers"></div></div><label>底圖來源／截圖日期<input id="mapSource" maxlength="240" placeholder="例如 Google Maps，截圖日期 2026-09-25；保留原圖標示"></label><div id="pointList" class="point-list"></div></div>
       <div class="toolbar bottom"><button id="exportBackup" type="button">匯出完整案件檔</button><label class="file-button">開啟案件檔<input id="importBackup" type="file" accept=".json,application/json" hidden></label><button id="newCase" type="button" class="danger">建立新案件</button></div>
     </section>
     <section id="measurePanel" class="tab-panel" hidden>

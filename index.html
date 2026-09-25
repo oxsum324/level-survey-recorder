@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#164348">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <title>水準測量現場紀錄 V0.1.0</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.1.0</span></h1></div><span id="saveState" role="status">載入中</span></header>
+  <nav class="tabs" aria-label="工作項目"><button data-tab="route" class="active">① 測線與點位</button><button data-tab="measure">② 現場讀數</button><button data-tab="photos">③ 照片與成果</button></nav>
+  <main>
+    <section id="routePanel" class="tab-panel">
+      <div class="section-head"><h2>案件與測線</h2><p>先指定起訖點；同一 BM 回測時，起點與終點選同一點。</p></div>
+      <div class="card grid two">
+        <label>案件名稱<input id="caseName" maxlength="120" placeholder="例如 ○○工程鄰房現況鑑定"></label>
+        <label>案件編號<input id="caseNo" maxlength="80"></label>
+        <label>測量日期<input id="surveyDate" type="date"></label>
+        <label>觀測者<input id="observer" maxlength="80"></label>
+        <label>儀器<input id="instrument" maxlength="120" placeholder="型號／編號"></label>
+        <label>高程基準／來源<input id="datum" maxlength="200" placeholder="例如 委託單位提供控制點 P10"></label>
+      </div>
+      <div class="card grid two">
+        <label>起點<select id="startId"></select></label>
+        <label>起點已知高程（m）<input id="startHeight" type="text" inputmode="decimal" autocomplete="off" placeholder="86.653"></label>
+        <label>預定終點<select id="endId"></select></label>
+        <label id="endHeightLabel">終點已知高程（m）<input id="endHeight" type="text" inputmode="decimal" autocomplete="off" placeholder="另一已知 BM 的高程"></label>
+        <label>容許閉合差（±mm，人工指定）<input id="toleranceMm" type="text" inputmode="decimal" autocomplete="off" placeholder="例如 5"></label>
+        <label>改正數分配<select id="adjustMethod"><option value="stations">按測站數等分</option><option value="distance">按各站測線長度比例</option></select></label>
+      </div>
+      <p class="note">容許值及分配方式須由案件指定。沒有已知終點高程或未完成測線時，只顯示暫算高程；超限時不產生改正後高程。</p>
+      <div class="section-head"><h2>點位與平面圖</h2><p>點號和觀測角色分開：S 點也可作前視、後視轉點。</p></div>
+      <div class="card"><div class="toolbar"><button id="addBM" type="button">＋ BM</button><button id="addS" type="button">＋ S</button><button id="addTP" type="button">＋ TP</button><label class="file-button">匯入位置圖<input id="mapFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div><p id="mapHint" class="note">新增點位並選擇「放到圖上」，再點圖面位置。底圖僅供位置示意，不以圖上距離計算測線長度。使用網路截圖時請保留原有來源標示。</p><div id="mapFrame" class="map-frame"><div id="mapEmpty">尚未匯入位置圖</div><img id="mapImage" alt="案件位置圖" hidden><div id="mapMarkers"></div></div><label>底圖來源／截圖日期<input id="mapSource" maxlength="240" placeholder="例如 Google Maps，截圖日期 2026-09-25；保留原圖標示"></label><div id="pointList" class="point-list"></div></div>
+      <div class="toolbar bottom"><button id="exportBackup" type="button">匯出完整案件檔</button><label class="file-button">開啟案件檔<input id="importBackup" type="file" accept=".json,application/json" hidden></label><button id="newCase" type="button" class="danger">建立新案件</button></div>
+    </section>
+    <section id="measurePanel" class="tab-panel" hidden>
+      <div class="section-head"><h2>逐站觀測</h2><p id="routeSummary"></p></div>
+      <div id="stationList"></div>
+      <div class="toolbar bottom"><button id="addStation" type="button" class="primary">＋ 新增測站</button><button id="quickS" type="button">＋ 新增 S 點</button><button id="quickTP" type="button">＋ 新增 TP 點</button></div>
+      <div class="card result-card"><h2>即時計算與閉合檢核</h2><div id="resultSummary"></div><div id="resultTable"></div><p id="resultNote" class="note"></p></div>
+    </section>
+    <section id="photosPanel" class="tab-panel" hidden>
+      <div class="section-head"><h2>點位照片與成果</h2><p>每張照片連到一個點位，並保留原始圖檔。</p></div>
+      <div class="card grid two"><label>照片對應點位<select id="photoPoint"></select></label><label>位置說明<input id="photoDescription" maxlength="300" placeholder="例如 圍牆轉角處鋼釘；水準尺底端所在點"></label><label class="file-button primary">開啟相機拍照<input id="photoFile" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden></label><label class="file-button">從相簿／檔案選擇<input id="photoGallery" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div>
+      <div id="photoList" class="photo-grid"></div>
+      <div class="card"><h2>成果交付</h2><p class="note">列印內容含點位圖、原始讀數、閉合檢核、改正後高程及照片。另請匯出完整案件檔保存可編輯資料及原始圖檔。</p><button id="printReport" type="button" class="primary">列印／另存 PDF</button><button id="exportBackup2" type="button">匯出完整案件檔</button></div>
+    </section>
+  </main>
+  <div id="message" role="alert" hidden></div>
+</body>
+</html>

@@ -223,6 +223,23 @@ function resultTable(result) {
   return `<div class="table-wrap"><table><thead><tr><th>站</th><th>點號</th><th>後視 BS<br>m</th><th>前視 FS<br>m</th><th>中間視 IS<br>m</th><th>暫算高程<br>m</th><th>改正後高程<br>m</th><th>備註</th></tr></thead><tbody>${resultRows(result)}</tbody></table></div>`;
 }
 
+function summaryStatus(result) {
+  if (!result.complete) return '測線未完成，總表僅供現場核對';
+  if (result.withinTolerance === true) return '閉合差符合人工指定容許值';
+  if (result.withinTolerance === false) return '閉合差超出人工指定容許值，未執行改正';
+  return '已完成測線；容許值或高程基準尚未確認，未判定閉合檢核';
+}
+
+function summaryMeta(result) {
+  return `<span>案件：<strong>${safe(project.name || '未填')}</strong></span><span>案號：<strong>${safe(project.number || '未填')}</strong></span><span>日期：<strong>${safe(project.date || '未填')}</strong></span>
+    <span>測線：<strong>${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}</strong></span><span>儀器：<strong>${safe(project.instrument || '未填')}</strong></span><span>起點${project.route.startHeightKind === 'assumed' ? '假設' : '已知'}高程：<strong>${formatHeight(result.startHeight)} m</strong></span>`;
+}
+
+function summaryChecks(result) {
+  const method = result.adjusted ? result.method === 'distance' ? '按各站長度分配' : '按測站數等分' : '未執行';
+  return `<span>ΣBS <strong>${formatHeight(result.sumBS)} m</strong></span><span>ΣFS <strong>${formatHeight(result.sumFS)} m</strong></span><span>閉合差 <strong>${formatMm(result.closureMm)} mm</strong></span><span>容許值 <strong>${result.toleranceMm === null ? '未指定' : `±${formatMm(result.toleranceMm)} mm`}</strong></span><span>改正 <strong>${method}</strong></span>`;
+}
+
 function renderResult() {
   const result = calculate(project);
   const state = result.withinTolerance === true ? 'ok' : result.withinTolerance === false ? 'over' : 'pending';
@@ -233,6 +250,8 @@ function renderResult() {
     ${gauge !== null ? `<div class="result-gauge" aria-label="閉合差佔容許值 ${Math.round(Math.abs(result.closureMm) / result.toleranceMm * 100)}%"><span style="width:${gauge}%"></span></div>` : ''}
     <div class="result-grid"><div><span>後視合計 BS</span><strong>${formatHeight(result.sumBS)} m</strong></div><div><span>前視合計 FS</span><strong>${formatHeight(result.sumFS)} m</strong></div><div><span>改正數分配</span><strong>${result.adjusted ? '已完成' : result.withinTolerance === true ? '待補資料' : '未執行'}</strong></div></div>`;
   $('#resultTable').innerHTML = resultTable(result);
+  $('#summaryTableMeta').innerHTML = summaryMeta(result);
+  $('#summaryTableStatus').innerHTML = `<strong>${summaryStatus(result)}</strong><div class="summary-checks">${summaryChecks(result)}</div>`;
   $('#resultMobile').innerHTML = result.stations.length ? result.stations.map(station => {
     const readings = [
       `<div class="result-reading"><b class="reading-chip bs">BS</b><strong>${safe(code(station.bsPointId))}</strong><span>${formatHeight(station.bs)} m</span><small>起點 ${formatHeight(station.rawStartHeight)} m</small></div>`,
@@ -797,10 +816,31 @@ function bindActions() {
     revokePhotos(); renderAll(); switchTab('route'); notify('已建立新案件。');
   };
   $('#printReport').onclick = printReport;
+  $('#printSummary').onclick = printSummary;
 }
 
 function printTable(result) {
   return `<table><thead><tr><th>站</th><th>點號</th><th>後視 BS<br>m</th><th>前視 FS<br>m</th><th>中間視 IS<br>m</th><th>暫算高程<br>m</th><th>改正後高程<br>m</th><th>備註</th></tr></thead><tbody>${resultRows(result)}</tbody></table>`;
+}
+
+function printSummary() {
+  const result = calculate(project);
+  const report = document.createElement('section');
+  report.id = 'printPanel';
+  report.className = 'summary-print';
+  report.innerHTML = `<header class="print-title"><h1>水準測量成果總表</h1><p>案件：${safe(project.name || '未填')}　案號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　儀器觀測者：${safe(project.observer || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p><p>測線：${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}　起點${project.route.startHeightKind === 'assumed' ? '假設' : '已知'}高程：${formatHeight(result.startHeight)} m</p></header>
+    <p class="summary-print-status"><strong>${summaryStatus(result)}</strong></p>${printTable(result)}
+    <div class="summary-print-checks">${summaryChecks(result)}<span>實測終點 <strong>${formatHeight(result.rawEndHeight)} m</strong></span></div>
+    ${result.issues.length ? `<p class="print-alert">待補／檢核事項：${safe(result.issues.join('；'))}</p>` : ''}
+    <p class="print-note">原始讀數、暫算高程與改正後高程分列；改正後高程僅在測線完整且閉合差符合人工指定容許值時產生。本表為單一測線簡易閉合差分配，不代表控制網整體平差。</p>
+    <footer>來源：水準測量現場紀錄 V${VERSION}｜列印日期：${safe(new Date().toLocaleDateString('zh-TW'))}</footer>`;
+  $('#printPanel')?.remove();
+  document.body.append(report);
+  const previousTitle = document.title;
+  document.title = `${project.number || project.name || '水準測量'}_水準測量成果總表`;
+  const cleanup = () => { document.title = previousTitle; window.removeEventListener('afterprint', cleanup); };
+  window.addEventListener('afterprint', cleanup);
+  window.print();
 }
 
 async function printReport() {
@@ -819,7 +859,7 @@ async function printReport() {
     <h2>一、測線與點位</h2><p>測線：${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}；起點${project.route.startHeightKind === 'assumed' ? '假設' : '已知'}高程：${formatHeight(result.startHeight)} m；${project.route.startId === project.route.endId ? '回測起點高程' : '終點已知高程'}：${formatHeight(result.endHeight)} m。</p>
     <p>約略地址／路名：${safe(project.approxLocation || '未填')}。底圖來源：${safe(project.mapSource || '未填')}。位置圖僅供示意，不作測線長度量測。</p>${map}
     <table class="point-print-table"><thead><tr><th>點號</th><th>類別</th><th>位置說明</th></tr></thead><tbody>${project.points.map(item => `<tr><td>${safe(item.code)}</td><td>${safe(item.type)}</td><td>${safe(item.description || '—')}</td></tr>`).join('')}</tbody></table>
-    <h2>二、原始讀數與高程成果</h2>${printTable(result)}
+    <h2>二、水準測量成果總表</h2><p><strong>${summaryStatus(result)}</strong></p>${printTable(result)}
     <p>後視合計 ${formatHeight(result.sumBS)} m；前視合計 ${formatHeight(result.sumFS)} m；實測終點高程 ${formatHeight(result.rawEndHeight)} m；閉合差 ${formatMm(result.closureMm)} mm。</p>
     <p>人工輸入容許值：${result.toleranceMm === null ? '未指定' : `±${formatMm(result.toleranceMm)} mm`}；檢核：${status}。改正方式：${result.adjusted ? result.method === 'distance' ? '按各站測線長度比例' : '按測站數等分' : '未執行'}。</p>
     ${project.routeHistory?.length ? `<p>終點變更紀錄：${project.routeHistory.map(item => `${safe(item.at.slice(0, 19))} ${safe(item.from)} → ${safe(item.to)}，原因：${safe(item.reason)}`).join('；')}</p>` : ''}

@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#164348">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <title>水準測量現場紀錄 V0.4.0</title>
+  <title>水準測量現場紀錄 V0.4.1</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.4.0</span></h1></div><span id="saveState" role="status">載入中</span></header>
+  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.4.1</span></h1></div><span id="saveState" role="status">載入中</span></header>
   <nav class="tabs" aria-label="工作項目"><button data-tab="route" class="active">① 案件與位置</button><button data-tab="measure">② 觀測讀數</button><button data-tab="photos">③ 點位攝影</button><button data-tab="result">④ 計算與成果</button></nav>
   <main>
     <section id="routePanel" class="tab-panel">
@@ -41,10 +41,9 @@
       <div class="toolbar bottom"><button id="exportBackup" type="button">匯出完整案件檔</button><label class="file-button">開啟案件檔<input id="importBackup" type="file" accept=".json,application/json" hidden></label><button id="newCase" type="button" class="danger">建立新案件</button></div>
     </section>
     <section id="measurePanel" class="tab-panel" hidden>
-      <div class="section-head"><h2>儀器旁的讀數紀錄</h2><p id="routeSummary"></p><p>儀器觀測者只記錄讀數與換站；扶尺人員留在點位。點位攝影可由另一人稍後完成。</p></div>
+      <div class="section-head measure-head"><h2>現場讀數</h2><p id="routeSummary"></p><details class="measure-help"><summary>操作說明</summary><p>依實際讀法選中間視、換站前視或終點前視。換站後在同一點讀後視。標圖與拍照可到「點位攝影」由現場人員補做；完整計算在「計算與成果」。</p></details></div>
       <div id="stationList"></div>
-      <div class="toolbar bottom"><button id="addStation" type="button" class="primary">開始第一站</button><button id="quickS" type="button">＋ S 點</button><button id="quickTP" type="button">＋ TP 點</button></div>
-      <p class="note">讀數完成後可點「在圖上標點」，不影響下一筆觀測。完整計算移至「計算與成果」。</p>
+      <div id="measureActions" class="toolbar bottom"><button id="addStation" type="button" class="primary">開始第一站</button><button id="quickS" type="button" hidden>＋ S 點</button><button id="quickTP" type="button" hidden>＋ TP 點</button></div>
     </section>
     <section id="photosPanel" class="tab-panel" hidden>
       <div class="section-head"><h2>點位攝影工作</h2><p>攝影者在水準尺所在點拍照；觀測者可持續留在儀器旁記錄讀數。照片依點號對應，與讀數分開完成。</p></div>
@@ -59,7 +58,7 @@
     </section>
     <section id="resultPanel" class="tab-panel" hidden>
       <div class="section-head"><h2>計算與閉合檢核</h2><p>原始讀數、暫算高程與改正後高程分列；現場輸入時可專注目前測站。</p></div>
-      <div class="card result-card"><div id="resultSummary"></div><div id="resultTable"></div><p id="resultNote" class="note"></p></div>
+      <div class="card result-card"><div id="resultSummary"></div><div id="resultTable"></div><div id="resultMobile"></div><details class="result-details"><summary>檢核與計算說明</summary><p id="resultNote" class="note"></p></details></div>
       <div class="card"><h2>成果交付</h2><p class="note">列印內容含點位圖、原始讀數、閉合檢核、改正後高程、點位照片及設備照片。公司設備參考照會註明來源與性質；另請匯出完整案件檔保存可編輯資料及本案圖像原檔。</p><button id="printReport" type="button" class="primary">列印／另存 PDF</button><button id="exportBackup2" type="button">匯出完整案件檔</button></div>
     </section>
   </main>

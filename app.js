@@ -149,29 +149,35 @@ function synchronizeSetups() {
 
 function renderStations() {
   synchronizeSetups();
-  const card = (setup, index) => `<section class="card station" data-station="${index}">
-    <div class="station-head"><h3>測站 ${index + 1}｜由 ${safe(code(setup.bsPointId))} 後視</h3><button type="button" data-remove-station="${index}" class="quiet danger-text">刪除此站及後續站</button></div>
-    <div class="reading-row"><span class="reading-role">後視 BS</span><strong>${safe(code(setup.bsPointId))}</strong><label>讀數（m）<input ${decimals} data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label><button type="button" data-field-map="${safe(setup.bsPointId)}">在圖上標點</button></div>
-    ${(setup.intermediate || []).map((sight, sightIndex) => `<div class="reading-row"><span class="reading-role">中間視 IS</span>
+  const card = (setup, index) => {
+    const active = index === project.setups.length - 1;
+    const waitingForNext = active && !setup.fsPointId && setup.fs === '';
+    const recorded = (setup.intermediate || []).map((sight, sightIndex) => `<div class="reading-row"><span class="reading-role">中間視 IS</span>
       <label>點位<select data-is-point="${index}:${sightIndex}">${options(project.points, sight.pointId)}</select></label>
       <label>讀數（m）<input ${decimals} data-is-value="${index}:${sightIndex}" value="${safe(sight.value)}" placeholder="0.000"></label>
-      <div class="reading-actions"><button type="button" data-field-map="${safe(sight.pointId)}">在圖上標點</button>${index === project.setups.length - 1 && sightIndex === setup.intermediate.length - 1 && !setup.fsPointId ? `<button type="button" data-convert-is="${index}:${sightIndex}">改為前視</button>` : ''}<button type="button" data-remove-is="${index}:${sightIndex}" class="quiet danger-text">移除</button></div></div>`).join('')}
-    ${setup.fsPointId || setup.fs !== '' ? `<div class="reading-row turn-row"><span class="reading-role">前視 FS</span>
+      <div class="reading-actions"><button type="button" data-field-map="${safe(sight.pointId)}">標圖</button>${active && sightIndex === setup.intermediate.length - 1 && !setup.fsPointId ? `<button type="button" data-convert-is="${index}:${sightIndex}">改為前視</button>` : ''}<button type="button" data-remove-is="${index}:${sightIndex}" class="quiet danger-text">移除</button></div></div>`).join('') +
+    (setup.fsPointId || setup.fs !== '' ? `<div class="reading-row turn-row"><span class="reading-role">前視 FS</span>
       <label>點位<select data-field="fsPointId" data-station="${index}">${options(project.points, setup.fsPointId)}</select></label>
       <label>讀數（m）<input ${decimals} data-field="fs" data-station="${index}" value="${safe(setup.fs)}" placeholder="0.000"></label>
-      <div class="reading-actions"><button type="button" data-field-map="${safe(setup.fsPointId)}">在圖上標點</button>${index === project.setups.length - 1 ? `<button type="button" data-convert-fs="${index}" class="quiet">改為中間視</button>` : ''}</div></div>` : ''}
-    ${index === project.setups.length - 1 && !setup.fsPointId && setup.fs === '' ? `<div class="next-reading"><h4>目前要觀測哪一點？</h4><div class="grid three">
-      <label>點位<select id="nextPoint">${options(project.points, draftNextPointId)}</select></label>
-      <label>完成讀數後<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>同站續測（中間視）</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視後換站（同點接後視）</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>終點前視（完成測線）</option></select></label>
-      <label>讀數（m）<input id="nextReading" ${decimals} value="${safe(draftNextValue)}" placeholder="0.000"></label></div>
-      <button type="button" data-add-next="${index}" class="primary">記錄此點並繼續</button><p class="note">換站時，下一站仍在此點讀後視；標圖與照片可稍後完成。</p></div>` : ''}
-    <details class="station-extra"><summary>本測站長度與其他資料</summary><label class="station-distance">測線長度（m，按距離分配時必填）<input ${decimals} data-field="distance" data-station="${index}" value="${safe(setup.distance)}" placeholder="例如 35.0"></label></details>
-  </section>`;
+      <div class="reading-actions"><button type="button" data-field-map="${safe(setup.fsPointId)}">標圖</button>${active ? `<button type="button" data-convert-fs="${index}" class="quiet">改為中間視</button>` : ''}</div></div>` : '');
+    return `<section class="card station ${active ? 'active-station' : ''}" data-station="${index}">
+      <div class="station-head"><h3>測站 ${index + 1} <small>由 ${safe(code(setup.bsPointId))} 後視</small></h3><button type="button" data-remove-station="${index}" class="quiet danger-text" title="刪除此站及後續站">刪除</button></div>
+      <div class="bs-entry"><label>後視 BS · ${safe(code(setup.bsPointId))}<input ${decimals} data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label></div>
+      ${waitingForNext ? `<div class="next-reading"><div class="next-point-line"><label>下一點<select id="nextPoint">${options(project.points, draftNextPointId)}</select></label><button type="button" data-quick-point="S">＋S</button><button type="button" data-quick-point="TP">＋TP</button></div>
+        <div class="next-value-line"><label>讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 · 同站</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視 · 換站</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>前視 · 終點</option></select></label><label>讀數（m）<input id="nextReading" ${decimals} value="${safe(draftNextValue)}" placeholder="0.000"></label></div>
+        <button type="button" data-add-next="${index}" class="primary record-next">記錄此點</button></div>` : ''}
+      <details class="station-records"><summary>${setup.fsPointId ? `前視 ${safe(code(setup.fsPointId))} · ${safe(setup.fs)} m` : `本站已記錄 ${(setup.intermediate || []).length} 點`} · 點開核對</summary>
+        <div class="reading-actions"><button type="button" data-field-map="${safe(setup.bsPointId)}">標註 ${safe(code(setup.bsPointId))}</button></div>${recorded}
+        <label class="station-distance">測線長度（m，按距離分配時填）<input ${decimals} data-field="distance" data-station="${index}" value="${safe(setup.distance)}" placeholder="例如 35.0"></label>
+      </details>
+    </section>`;
+  };
   const previous = project.setups.slice(0, -1);
-  $('#stationList').innerHTML = (previous.length ? `<details class="history"><summary>已記錄 ${previous.length} 站 · 點開可核對或更正</summary>${previous.map(card).join('')}</details>` : '') + (project.setups.length ? card(project.setups.at(-1), project.setups.length - 1) : '<div class="empty-state">請先開始第一站，在 BM 點輸入後視。</div>');
+  $('#stationList').innerHTML = (project.setups.length ? card(project.setups.at(-1), project.setups.length - 1) : '') + (previous.length ? `<details class="history"><summary>前 ${previous.length} 站 · 核對與更正</summary>${previous.map(card).join('')}</details>` : '');
   const last = project.setups.at(-1);
   $('#addStation').hidden = !!last && (!last.fsPointId || last.fsPointId === project.route.endId);
   $('#addStation').textContent = !last ? `開始第一站：後視 ${code(project.route.startId)}` : `搬站：於 ${code(last.fsPointId)} 讀後視`;
+  $('#measureActions').hidden = $('#addStation').hidden;
   renderRouteSelections();
   renderResult();
   renderPhotoQueue();
@@ -219,17 +225,22 @@ function resultTable(result) {
 
 function renderResult() {
   const result = calculate(project);
-  const rows = [
-    `<div><span>後視合計</span><strong>${formatHeight(result.sumBS)} m</strong></div>`,
-    `<div><span>前視合計</span><strong>${formatHeight(result.sumFS)} m</strong></div>`,
-    `<div><span>實測終點高程</span><strong>${formatHeight(result.rawEndHeight)} m</strong></div>`,
-    `<div><span>閉合差</span><strong>${result.complete ? `${formatMm(result.closureMm)} mm` : '待完成'}</strong></div>`,
-    `<div><span>容許值</span><strong>${result.toleranceMm === null ? '尚未指定' : `±${formatMm(result.toleranceMm)} mm`}</strong></div>`,
-    `<div><span>檢核</span><strong class="${result.withinTolerance === false ? 'danger-text' : ''}">${result.withinTolerance === true ? '符合輸入容許值' : result.withinTolerance === false ? '超出容許值' : '尚不能判定'}</strong></div>`,
-    `<div><span>改正數分配</span><strong>${result.adjusted ? '已完成' : result.withinTolerance === true ? '待補分配資料' : '未執行'}</strong></div>`,
-  ];
-  $('#resultSummary').innerHTML = `<div class="result-grid">${rows.join('')}</div>`;
+  const state = result.withinTolerance === true ? 'ok' : result.withinTolerance === false ? 'over' : 'pending';
+  const status = state === 'ok' ? '符合指定容許值' : state === 'over' ? '超出指定容許值' : result.complete ? '尚未指定容許值' : '測線尚未完成';
+  const limit = result.toleranceMm === null ? '尚未指定' : `±${formatMm(result.toleranceMm)} mm`;
+  const gauge = result.complete && result.toleranceMm > 0 ? Math.min(100, Math.abs(result.closureMm) / result.toleranceMm * 100) : null;
+  $('#resultSummary').innerHTML = `<div class="result-hero ${state}"><div><span class="result-eyebrow">${safe(code(project.route.startId))} → ${safe(code(project.route.endId))} · ${result.stations.length} 站</span><span class="result-hero-label">閉合差</span><strong class="result-hero-value">${result.complete ? formatMm(result.closureMm) : '待完成'}${result.complete ? '<small> mm</small>' : ''}</strong><span class="result-status">${status}</span></div><div class="result-hero-side"><span>指定容許值</span><strong>${limit}</strong><span>實測終點高程</span><strong>${formatHeight(result.rawEndHeight)} m</strong></div></div>
+    ${gauge !== null ? `<div class="result-gauge" aria-label="閉合差佔容許值 ${Math.round(Math.abs(result.closureMm) / result.toleranceMm * 100)}%"><span style="width:${gauge}%"></span></div>` : ''}
+    <div class="result-grid"><div><span>後視合計 BS</span><strong>${formatHeight(result.sumBS)} m</strong></div><div><span>前視合計 FS</span><strong>${formatHeight(result.sumFS)} m</strong></div><div><span>改正數分配</span><strong>${result.adjusted ? '已完成' : result.withinTolerance === true ? '待補資料' : '未執行'}</strong></div></div>`;
   $('#resultTable').innerHTML = resultTable(result);
+  $('#resultMobile').innerHTML = result.stations.length ? result.stations.map(station => {
+    const readings = [
+      `<div class="result-reading"><b class="reading-chip bs">BS</b><strong>${safe(code(station.bsPointId))}</strong><span>${formatHeight(station.bs)} m</span><small>起點 ${formatHeight(station.rawStartHeight)} m</small></div>`,
+      ...station.intermediate.map((sight, index) => `<div class="result-reading"><b class="reading-chip is">IS</b><strong>${safe(code(sight.pointId))}</strong><span>${formatHeight(sight.value)} m</span><small>高程 ${formatHeight(result.adjusted ? station.adjustedIntermediate?.[index]?.adjustedHeight : sight.rawHeight)} m${result.adjusted ? '（改正後）' : ''}</small></div>`),
+      ...(station.complete ? [`<div class="result-reading"><b class="reading-chip fs">FS</b><strong>${safe(code(station.fsPointId))}</strong><span>${formatHeight(station.fs)} m</span><small>高程 ${formatHeight(result.adjusted ? station.adjustedEndHeight : station.rawEndHeight)} m${result.adjusted ? '（改正後）' : ''}</small></div>`] : []),
+    ];
+    return `<section class="result-station-card"><h3>測站 ${station.index}<small>${station.complete ? `${safe(code(station.bsPointId))} → ${safe(code(station.fsPointId))}` : '記錄中'}</small></h3>${readings.join('')}</section>`;
+  }).join('') : '<p class="note">尚未記錄觀測讀數。</p>';
   const method = result.method === 'distance' ? '按各站測線長度比例' : '按測站數等分';
   $('#resultNote').textContent = [
     ...result.issues,
@@ -497,6 +508,7 @@ function switchTab(name) {
     $(`#${tab}Panel`).hidden = tab !== name;
     $(`.tabs [data-tab="${tab}"]`).classList.toggle('active', tab === name);
   }
+  document.body.classList.toggle('measure-mode', name === 'measure');
   if (name === 'photos') renderPhotos();
   window.scrollTo(0, 0);
   queueSave(true);
@@ -615,6 +627,7 @@ function bindActions() {
     const target = event.target.closest('button');
     if (!target) return;
     if (target.dataset.tab) { switchTab(target.dataset.tab); return; }
+    if (target.dataset.quickPoint) { addPoint(target.dataset.quickPoint, true); return; }
     if (target.dataset.fieldMap) { openFieldMap(target.dataset.fieldMap); return; }
     if (target.dataset.selectPhotoPoint) { $('#photoPoint').value = target.dataset.selectPhotoPoint; $('#photoDescription').focus(); return; }
     if (target.dataset.place) {

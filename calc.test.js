@@ -78,6 +78,21 @@ test('different known BM checks measured end against its own height', () => {
   assert.equal(result.withinTolerance, false);
 });
 
+test('assumed start elevation cannot certify closure to another known BM', () => {
+  const project = example('0.883');
+  project.points.push({ id: 'BM2', code: 'BM2', type: 'BM' });
+  project.route.endId = 'BM2';
+  project.route.endHeight = '86.653';
+  project.route.startHeightKind = 'assumed';
+  project.setups[2].fsPointId = 'BM2';
+  const result = calculate(project);
+  assert.equal(result.complete, true);
+  assert.equal(result.closureMm.toFixed(2), '0.00');
+  assert.equal(result.withinTolerance, null);
+  assert.equal(result.adjusted, false);
+  assert.match(result.issues.join(' '), /高程基準/);
+});
+
 test('decimal comma from a mobile keyboard is accepted', () => {
   const project = example();
   project.setups[0].bs = '0,595';

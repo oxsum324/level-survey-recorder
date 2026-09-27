@@ -4,6 +4,7 @@ import { loadProject, saveProject, saveMedia, loadMedia, deleteMedia, replacePro
 const $ = selector => document.querySelector(selector);
 const uid = () => crypto.randomUUID();
 const safe = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+const validPosition = value => value && Number.isFinite(value.x) && Number.isFinite(value.y) && value.x >= 0 && value.x <= 100 && value.y >= 0 && value.y <= 100;
 const decimals = 'type="text" inputmode="decimal" autocomplete="off"';
 const validReading = value => /^\d+(?:[.,]\d{1,5})?$/.test(String(value ?? '').trim());
 const DEFAULT_INSTRUMENT = 'PENTAX AP-128';
@@ -22,8 +23,8 @@ function blankProject() {
   const bm = { id: uid(), code: 'BM1', type: 'BM', description: '', position: null };
   return {
     schema: 1, appVersion: VERSION, id: uid(), name: '', number: '', date: new Date().toISOString().slice(0, 10),
-    observer: '', instrument: DEFAULT_INSTRUMENT, instrumentDefaultApplied: true, datum: '', approxLocation: '', points: [bm], mapMediaId: null, mapSource: '', photos: [], equipmentPhotos: [],
-    route: { startId: bm.id, endId: bm.id, startHeight: '', endHeight: '', toleranceMm: '', adjustMethod: 'stations' },
+    observer: '', rodHolder: '', photographer: '', instrument: DEFAULT_INSTRUMENT, instrumentDefaultApplied: true, datum: '', approxLocation: '', points: [bm], mapMediaId: null, mapSource: '', photos: [], equipmentPhotos: [],
+    route: { startId: bm.id, endId: bm.id, startHeight: '10.000', startHeightKind: 'assumed', endHeight: '', toleranceMm: '', adjustMethod: 'stations' },
     setups: [], routeHistory: [], updatedAt: new Date().toISOString(),
   };
 }
@@ -36,6 +37,9 @@ function normalizeProject() {
     project.instrumentDefaultApplied = true;
     changed = true;
   }
+  if (!project.route.startHeightKind) { project.route.startHeightKind = 'known'; changed = true; }
+  if (project.rodHolder === undefined) { project.rodHolder = ''; changed = true; }
+  if (project.photographer === undefined) { project.photographer = ''; changed = true; }
   return changed;
 }
 
@@ -55,6 +59,7 @@ function updateGoogleMapsLink() {
   $('#openGoogleMaps').href = location
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`
     : 'https://www.google.com/maps';
+  $('#fieldGoogleMaps').href = $('#openGoogleMaps').href;
 }
 
 function queueSave(immediate = false) {
@@ -86,16 +91,36 @@ function renderRouteSelections() {
   $('#routeSummary').textContent = `${code(project.route.startId)} → ${code(project.route.endId)}｜${project.setups.length} 站`;
 }
 
+function observedPointIds() {
+  const ids = new Set([project.route.startId]);
+  for (const setup of project.setups) {
+    for (const sight of setup.intermediate || []) if (sight.pointId) ids.add(sight.pointId);
+    if (setup.fsPointId) ids.add(setup.fsPointId);
+  }
+  return ids;
+}
+
+function renderPhotoQueue() {
+  const observed = project.photoTaskMode && Array.isArray(project.photoTargetIds) ? new Set(project.photoTargetIds) : observedPointIds();
+  const photographed = new Set(project.photos.map(photo => photo.pointId));
+  const targets = project.points.filter(item => observed.has(item.id));
+  const pendingPhotos = targets.filter(item => !photographed.has(item.id));
+  const pendingPositions = targets.filter(item => !validPosition(item.position));
+  $('#photoProgress').textContent = `${project.photoTaskMode ? '攝影工作檔' : '已觀測'} ${observed.size} 點；待攝影 ${pendingPhotos.length} 點；待標圖 ${pendingPositions.length} 點。攝影與標圖可由同一位現場人員完成。`;
+  $('#photoQueue').innerHTML = targets.filter(item => !photographed.has(item.id) || !validPosition(item.position)).map(item => `<div class="photo-task"><strong>${safe(item.code)}</strong>${!photographed.has(item.id) ? `<button type="button" data-select-photo-point="${safe(item.id)}">選此點拍照</button>` : ''}${!validPosition(item.position) ? `<button type="button" data-field-map="${safe(item.id)}">在圖上標點</button>` : ''}</div>`).join('');
+}
+
 function renderPoints() {
   $('#pointList').innerHTML = project.points.map(item => `<div class="point-card" data-point="${safe(item.id)}">
     <div class="point-badge ${safe(item.type.toLowerCase())}">${safe(item.type)}</div>
     <label>點號<input data-point-code="${safe(item.id)}" value="${safe(item.code)}" maxlength="24"></label>
     <label>點位說明<input data-point-description="${safe(item.id)}" value="${safe(item.description)}" maxlength="300" placeholder="固定標誌、構造物位置"></label>
-    <div class="point-actions"><button type="button" data-place="${safe(item.id)}">${item.position ? '移動圖上標記' : '放到圖上'}</button><button type="button" data-delete-point="${safe(item.id)}" class="quiet danger-text">刪除</button></div>
+    <div class="point-actions"><button type="button" data-place="${safe(item.id)}">${validPosition(item.position) ? '移動圖上標記' : '放到圖上'}</button><button type="button" data-delete-point="${safe(item.id)}" class="quiet danger-text">刪除</button></div>
   </div>`).join('');
-  $('#mapMarkers').innerHTML = project.points.filter(item => item.position).map(item =>
+  $('#mapMarkers').innerHTML = project.points.filter(item => validPosition(item.position)).map(item =>
     `<span class="map-marker ${safe(item.type.toLowerCase())}" style="left:${item.position.x}%;top:${item.position.y}%" title="${safe(item.code)}"><b>${safe(item.code)}</b></span>`).join('');
   renderRouteSelections();
+  renderPhotoQueue();
 }
 
 async function renderMap() {
@@ -124,30 +149,50 @@ function synchronizeSetups() {
 
 function renderStations() {
   synchronizeSetups();
-  $('#stationList').innerHTML = project.setups.map((setup, index) => `<section class="card station" data-station="${index}">
-    <div class="station-head"><h3>測站 ${index + 1}｜${index ? `由 ${safe(code(setup.bsPointId))} 後視開始` : `由 ${safe(code(project.route.startId))} 起測`}</h3><button type="button" data-remove-station="${index}" class="quiet danger-text">刪除此站及後續站</button></div>
-    ${index === 0 ? `<div class="reading-row"><span class="reading-role">起點</span><strong>${safe(code(setup.bsPointId))}</strong><label>後視 BS（m）<input ${decimals} data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label></div>` : `<p class="note">${safe(code(setup.bsPointId))} 的後視 BS 請在上一站的前視點同一列填寫。</p>`}
+  const card = (setup, index) => `<section class="card station" data-station="${index}">
+    <div class="station-head"><h3>測站 ${index + 1}｜由 ${safe(code(setup.bsPointId))} 後視</h3><button type="button" data-remove-station="${index}" class="quiet danger-text">刪除此站及後續站</button></div>
+    <div class="reading-row"><span class="reading-role">後視 BS</span><strong>${safe(code(setup.bsPointId))}</strong><label>讀數（m）<input ${decimals} data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label><button type="button" data-field-map="${safe(setup.bsPointId)}">在圖上標點</button></div>
     ${(setup.intermediate || []).map((sight, sightIndex) => `<div class="reading-row"><span class="reading-role">中間視 IS</span>
       <label>點位<select data-is-point="${index}:${sightIndex}">${options(project.points, sight.pointId)}</select></label>
       <label>讀數（m）<input ${decimals} data-is-value="${index}:${sightIndex}" value="${safe(sight.value)}" placeholder="0.000"></label>
-      <div class="reading-actions">${sightIndex === setup.intermediate.length - 1 && !setup.fsPointId ? `<button type="button" data-convert-is="${index}:${sightIndex}">改為前視／換站點</button>` : ''}<button type="button" data-remove-is="${index}:${sightIndex}" class="quiet danger-text">移除</button></div></div>`).join('')}
-    ${setup.fsPointId || setup.fs !== '' ? `<div class="reading-row turn-row"><span class="reading-role">前視／換站點</span>
-      <label>同一點位<select data-field="fsPointId" data-station="${index}">${options(project.points, setup.fsPointId)}</select></label>
-      <label>本測站前視 FS（m）<input ${decimals} data-field="fs" data-station="${index}" value="${safe(setup.fs)}" placeholder="0.000"></label>
-      ${project.setups[index + 1] ? `<label>搬站後同點後視 BS（m）<input ${decimals} data-field="bs" data-station="${index + 1}" value="${safe(project.setups[index + 1].bs)}" placeholder="0.000"></label>` : `<p class="note">${setup.fsPointId === project.route.endId ? '此點為預定終點，完成前視後即可閉合檢核。' : '搬站後，仍在此點讀取下一站後視。'}</p>`}
-      ${!project.setups[index + 1] ? `<button type="button" data-convert-fs="${index}" class="quiet">改為中間視</button>` : ''}</div>` : ''}
-    ${index === project.setups.length - 1 && !setup.fsPointId && setup.fs === '' ? `<div class="next-reading"><h4>下一個觀測點</h4><div class="grid three">
+      <div class="reading-actions"><button type="button" data-field-map="${safe(sight.pointId)}">在圖上標點</button>${index === project.setups.length - 1 && sightIndex === setup.intermediate.length - 1 && !setup.fsPointId ? `<button type="button" data-convert-is="${index}:${sightIndex}">改為前視</button>` : ''}<button type="button" data-remove-is="${index}:${sightIndex}" class="quiet danger-text">移除</button></div></div>`).join('')}
+    ${setup.fsPointId || setup.fs !== '' ? `<div class="reading-row turn-row"><span class="reading-role">前視 FS</span>
+      <label>點位<select data-field="fsPointId" data-station="${index}">${options(project.points, setup.fsPointId)}</select></label>
+      <label>讀數（m）<input ${decimals} data-field="fs" data-station="${index}" value="${safe(setup.fs)}" placeholder="0.000"></label>
+      <div class="reading-actions"><button type="button" data-field-map="${safe(setup.fsPointId)}">在圖上標點</button>${index === project.setups.length - 1 ? `<button type="button" data-convert-fs="${index}" class="quiet">改為中間視</button>` : ''}</div></div>` : ''}
+    ${index === project.setups.length - 1 && !setup.fsPointId && setup.fs === '' ? `<div class="next-reading"><h4>目前要觀測哪一點？</h4><div class="grid three">
       <label>點位<select id="nextPoint">${options(project.points, draftNextPointId)}</select></label>
-      <label>本點讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 IS（儀器不搬站）</option><option value="FS" ${draftNextRole === 'FS' ? 'selected' : ''}>前視 FS（此點可接續下一站後視）</option></select></label>
+      <label>完成讀數後<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>同站續測（中間視）</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視後換站（同點接後視）</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>終點前視（完成測線）</option></select></label>
       <label>讀數（m）<input id="nextReading" ${decimals} value="${safe(draftNextValue)}" placeholder="0.000"></label></div>
-      <button type="button" data-add-next="${index}" class="primary">記錄此點</button><p class="note">選前視後，如需搬站，下一站後視會自動連到同一點；到達預定終點時不需搬站。</p></div>` : ''}
-    <label class="station-distance">本測站長度（m，按距離分配時必填）<input ${decimals} data-field="distance" data-station="${index}" value="${safe(setup.distance)}" placeholder="例如 35.0"></label>
-  </section>`).join('') || '<div class="empty-state">先在「測線與點位」指定起點，再開始第一站後視。</div>';
+      <button type="button" data-add-next="${index}" class="primary">記錄此點並繼續</button><p class="note">換站時，下一站仍在此點讀後視；標圖與照片可稍後完成。</p></div>` : ''}
+    <details class="station-extra"><summary>本測站長度與其他資料</summary><label class="station-distance">測線長度（m，按距離分配時必填）<input ${decimals} data-field="distance" data-station="${index}" value="${safe(setup.distance)}" placeholder="例如 35.0"></label></details>
+  </section>`;
+  const previous = project.setups.slice(0, -1);
+  $('#stationList').innerHTML = (previous.length ? `<details class="history"><summary>已記錄 ${previous.length} 站 · 點開可核對或更正</summary>${previous.map(card).join('')}</details>` : '') + (project.setups.length ? card(project.setups.at(-1), project.setups.length - 1) : '<div class="empty-state">請先開始第一站，在 BM 點輸入後視。</div>');
   const last = project.setups.at(-1);
   $('#addStation').hidden = !!last && (!last.fsPointId || last.fsPointId === project.route.endId);
   $('#addStation').textContent = !last ? `開始第一站：後視 ${code(project.route.startId)}` : `搬站：於 ${code(last.fsPointId)} 讀後視`;
   renderRouteSelections();
   renderResult();
+  renderPhotoQueue();
+}
+
+function openFieldMap(pointId) {
+  if (!point(pointId)) { notify('請先指定要標註的點位。', true); return; }
+  placingPointId = pointId;
+  $('#fieldMapTitle').textContent = `在圖上標註 ${code(pointId)}`;
+  $('#fieldMapMessage').textContent = project.mapMediaId ? '點選底圖上的實際點位，完成後返回原頁。' : '尚未匯入位置圖；可先匯入截圖，或關閉後繼續作業。';
+  $('#fieldMapSource').value = project.mapSource || '';
+  $('#fieldMapHolder').append($('#mapFrame'));
+  $('#mapFrame').classList.add('placing');
+  $('#fieldMapDialog').showModal();
+}
+
+function closeFieldMap() {
+  $('#mapHome').append($('#mapFrame'));
+  $('#fieldMapDialog').close();
+  $('#mapFrame').classList.remove('placing');
+  placingPointId = null;
 }
 
 function resultRows(result) {
@@ -237,6 +282,7 @@ function revokePhotos() {
 async function renderPhotos() {
   const selected = $('#photoPoint').value;
   $('#photoPoint').innerHTML = options(project.points, selected);
+  renderPhotoQueue();
   revokePhotos();
   const equipmentList = $('#equipmentPhotoList');
   equipmentList.innerHTML = project.equipmentPhotos.map(photo => `<article class="photo-card" data-equipment-photo="${safe(photo.id)}">
@@ -256,7 +302,7 @@ async function renderPhotos() {
   const list = $('#photoList');
   list.innerHTML = project.photos.map(photo => `<article class="photo-card" data-photo="${safe(photo.id)}">
     <div class="photo-preview"><img alt="${safe(code(photo.pointId))} 現場照片" data-photo-image="${safe(photo.id)}"></div>
-    <div class="photo-body"><strong>${safe(code(photo.pointId))}</strong><small>${safe(photo.name)} · ${safe(photo.addedAt.slice(0, 10))}</small>
+    <div class="photo-body"><strong>${safe(code(photo.pointId))}</strong><small>${safe(photo.name)} · ${safe(photo.addedAt.slice(0, 10))} · 攝影：${safe(photo.photographer || '未記錄')}</small>
       <label>位置說明<input data-photo-description="${safe(photo.id)}" value="${safe(photo.description)}" maxlength="300"></label>
       <button type="button" data-delete-photo="${safe(photo.id)}" class="quiet danger-text">刪除此照片</button></div></article>`).join('') || '<p class="empty-state">尚無點位照片。</p>';
   for (const photo of project.photos) {
@@ -292,7 +338,8 @@ async function addImage(file, usage) {
         await renderMap();
         if (previous) await deleteMedia(previous);
         notify('底圖已匯入；請填來源及截圖日期，再放置點位。');
-        if (!project.mapSource) $('#mapSource').focus();
+        if ($('#fieldMapDialog').open) $('#fieldMapMessage').textContent = '底圖已匯入。請填來源及截圖日期，然後點圖面標註位置。';
+        else if (!project.mapSource) $('#mapSource').focus();
       } catch (error) {
         project.mapMediaId = previous;
         project.points.forEach((item, index) => { item.position = previousPositions[index]; });
@@ -309,7 +356,7 @@ async function addImage(file, usage) {
     } else {
       const pointId = $('#photoPoint').value;
       if (!point(pointId)) { await deleteMedia(id); notify('請先選擇照片對應點位。', true); return; }
-      project.photos.push({ id: uid(), pointId, mediaId: id, name: file.name, description: $('#photoDescription').value.trim(), addedAt: new Date().toISOString() });
+      project.photos.push({ id: uid(), pointId, mediaId: id, name: file.name, description: $('#photoDescription').value.trim(), photographer: project.photographer.trim(), addedAt: new Date().toISOString() });
       $('#photoDescription').value = '';
       await renderPhotos();
       queueSave(true);
@@ -337,6 +384,96 @@ async function exportBackup() {
   } catch (error) { notify(`匯出失敗：${error.message}`, true); }
 }
 
+async function exportPhotoWork(kind) {
+  try {
+    const workProject = structuredClone(project);
+    if (kind === 'task') {
+      workProject.photoTaskMode = true;
+      const photographed = new Set(project.photos.map(photo => photo.pointId));
+      workProject.photoTargetIds = [...observedPointIds()].filter(id => !photographed.has(id));
+      workProject.setups = [];
+      workProject.routeHistory = [];
+      workProject.photos = [];
+      workProject.equipmentPhotos = [];
+    }
+    const backup = await makeBackup(workProject);
+    const label = kind === 'task' ? '攝影工作檔' : '攝影成果';
+    const name = `${(project.number || project.name || '水準測量').replace(/[\\/:*?"<>|]/g, '_')}_${label}_${new Date().toISOString().slice(0, 10)}.json`;
+    download(name, new Blob([JSON.stringify(backup)], { type: 'application/json' }));
+    notify(`${label}已下載；請將此檔交給另一位作業者。`);
+  } catch (error) { notify(`匯出失敗：${error.message}`, true); }
+}
+
+async function mergePhotoBackup(file) {
+  if (!file) return;
+  try {
+    const incoming = parseBackup(await file.text());
+    if (incoming.project.id !== project.id) throw new Error('案件識別碼不同，無法合併。');
+    const knownPoints = new Set(project.points.map(item => item.id));
+    const existingPhotos = new Set(project.photos.map(photo => photo.id));
+    const existingMediaIds = new Set([project.mapMediaId, ...project.photos.map(photo => photo.mediaId), ...project.equipmentPhotos.map(photo => photo.mediaId)]);
+    const additions = incoming.project.photos.filter(photo => !existingPhotos.has(photo.id));
+    if (additions.some(photo => !knownPoints.has(photo.pointId))) throw new Error('攝影檔含本機尚未建立的點位；請先更新本機點位。');
+    if (additions.some(photo => existingMediaIds.has(photo.mediaId))) throw new Error('攝影檔的圖像識別碼與本機資料重複，未執行合併。');
+    if (additions.some(photo => typeof photo.id !== 'string' || typeof photo.mediaId !== 'string' || typeof photo.addedAt !== 'string' || typeof photo.name !== 'string')) throw new Error('攝影檔的照片紀錄不完整。');
+    const mediaById = new Map(incoming.media.map(item => [item.id, item.blob]));
+    const newMapId = !project.mapMediaId && incoming.project.mapMediaId ? incoming.project.mapMediaId : null;
+    if (newMapId && existingMediaIds.has(newMapId)) throw new Error('攝影檔的位置圖識別碼與本機圖像重複。');
+    const mapConflict = !!(project.mapMediaId && incoming.project.mapMediaId && incoming.project.mapMediaId !== project.mapMediaId);
+    const sameMap = newMapId || (project.mapMediaId && incoming.project.mapMediaId === project.mapMediaId);
+    const pointUpdates = (incoming.project.points || []).filter(item => {
+      const current = point(item.id);
+      return current && ((typeof item.description === 'string' && item.description.trim() && !current.description) || (sameMap && validPosition(item.position) && !validPosition(current.position)));
+    });
+    if (!additions.length && !pointUpdates.length && !newMapId) { notify('沒有新的照片或點位資料可合併。'); return; }
+    if (!confirm(`此檔有 ${additions.length} 張新照片、${pointUpdates.length} 個待補點位${newMapId ? '及 1 張位置圖' : ''}。合併到目前案件？既有讀數與已填點位不會被覆蓋。${mapConflict ? '兩端底圖不同，圖上位置不會合併。' : ''}`)) return;
+    const addedMedia = [];
+    const oldPhotos = project.photos;
+    const oldPoints = structuredClone(project.points);
+    const oldMapId = project.mapMediaId;
+    const oldMapSource = project.mapSource;
+    clearTimeout(saveTimer);
+    await saveQueue;
+    try {
+      if (newMapId) {
+        const blob = mediaById.get(newMapId);
+        if (!blob) throw new Error('攝影檔缺少位置圖原檔。');
+        await saveMedia(newMapId, blob);
+        addedMedia.push(newMapId);
+        project.mapMediaId = newMapId;
+        if (!project.mapSource) project.mapSource = incoming.project.mapSource || '';
+      }
+      for (const photo of additions) {
+        const blob = mediaById.get(photo.mediaId);
+        if (!blob) throw new Error('攝影檔缺少照片原檔。');
+        await saveMedia(photo.mediaId, blob);
+        addedMedia.push(photo.mediaId);
+      }
+      for (const item of pointUpdates) {
+        const current = point(item.id);
+        if (!current.description && typeof item.description === 'string') current.description = item.description.trim().slice(0, 300);
+        if (!validPosition(current.position) && sameMap && validPosition(item.position)) current.position = { x: item.position.x, y: item.position.y };
+      }
+      project.photos = [...oldPhotos, ...additions];
+      await saveProject(structuredClone(project));
+      $('#mapSource').value = project.mapSource || '';
+      $('#fieldMapSource').value = project.mapSource || '';
+      renderPoints();
+      await renderMap();
+      await renderPhotos();
+      notify(`已合併 ${additions.length} 張照片、${pointUpdates.length} 個點位；觀測讀數維持原狀。${mapConflict ? '兩端底圖不同，圖上位置未合併。' : ''}`);
+    } catch (error) {
+      project.photos = oldPhotos;
+      project.points = oldPoints;
+      project.mapMediaId = oldMapId;
+      project.mapSource = oldMapSource;
+      await saveProject(structuredClone(project)).catch(() => {});
+      for (const id of addedMedia) await deleteMedia(id).catch(() => {});
+      throw error;
+    }
+  } catch (error) { notify(`合併失敗：${error.message}`, true); }
+}
+
 async function importBackup(file) {
   if (!file) return;
   try {
@@ -350,12 +487,13 @@ async function importBackup(file) {
     if (normalizeProject()) queueSave(true);
     revokePhotos();
     renderAll();
+    if (project.photoTaskMode) switchTab('photos');
     notify('案件檔已開啟，請核對點位圖、讀數及照片。');
   } catch (error) { notify(`開啟失敗：${error.message}`, true); }
 }
 
 function switchTab(name) {
-  for (const tab of ['route', 'measure', 'photos']) {
+  for (const tab of ['route', 'measure', 'photos', 'result']) {
     $(`#${tab}Panel`).hidden = tab !== name;
     $(`.tabs [data-tab="${tab}"]`).classList.toggle('active', tab === name);
   }
@@ -365,29 +503,36 @@ function switchTab(name) {
 }
 
 function renderAll() {
+  for (const tab of ['measure', 'result']) $(`.tabs [data-tab="${tab}"]`).hidden = !!project.photoTaskMode;
   $('#caseName').value = project.name || '';
   $('#caseNo').value = project.number || '';
   $('#surveyDate').value = project.date || '';
   $('#observer').value = project.observer || '';
+  $('#rodHolder').value = project.rodHolder || '';
+  $('#photographer').value = project.photographer || '';
   $('#instrument').value = project.instrument || '';
   $('#datum').value = project.datum || '';
   $('#approxLocation').value = project.approxLocation || '';
   updateGoogleMapsLink();
   $('#startHeight').value = project.route.startHeight || '';
+  $('#startHeightKind').value = project.route.startHeightKind || 'known';
   $('#endHeight').value = project.route.endHeight || '';
   $('#toleranceMm').value = project.route.toleranceMm || '';
   $('#adjustMethod').value = project.route.adjustMethod || 'stations';
   $('#mapSource').value = project.mapSource || '';
+  $('#fieldMapSource').value = project.mapSource || '';
   renderPoints(); renderMap(); renderStations(); renderPhotos();
 }
 
 function handleRouteInput(event) {
-  const mapping = { caseName: 'name', caseNo: 'number', surveyDate: 'date', observer: 'observer', instrument: 'instrument', datum: 'datum', approxLocation: 'approxLocation', mapSource: 'mapSource' };
-  const routeMapping = { startHeight: 'startHeight', endHeight: 'endHeight', toleranceMm: 'toleranceMm', adjustMethod: 'adjustMethod' };
+  const mapping = { caseName: 'name', caseNo: 'number', surveyDate: 'date', observer: 'observer', rodHolder: 'rodHolder', photographer: 'photographer', instrument: 'instrument', datum: 'datum', approxLocation: 'approxLocation', mapSource: 'mapSource', fieldMapSource: 'mapSource' };
+  const routeMapping = { startHeight: 'startHeight', startHeightKind: 'startHeightKind', endHeight: 'endHeight', toleranceMm: 'toleranceMm', adjustMethod: 'adjustMethod' };
   if (mapping[event.target.id]) project[mapping[event.target.id]] = event.target.value;
   else if (routeMapping[event.target.id]) project.route[routeMapping[event.target.id]] = event.target.value;
   else return false;
   if (event.target.id === 'approxLocation') updateGoogleMapsLink();
+  if (event.target.id === 'fieldMapSource') $('#mapSource').value = event.target.value;
+  if (event.target.id === 'mapSource') $('#fieldMapSource').value = event.target.value;
   renderResult(); queueSave();
   return true;
 }
@@ -470,6 +615,8 @@ function bindActions() {
     const target = event.target.closest('button');
     if (!target) return;
     if (target.dataset.tab) { switchTab(target.dataset.tab); return; }
+    if (target.dataset.fieldMap) { openFieldMap(target.dataset.fieldMap); return; }
+    if (target.dataset.selectPhotoPoint) { $('#photoPoint').value = target.dataset.selectPhotoPoint; $('#photoDescription').focus(); return; }
     if (target.dataset.place) {
       if (!project.mapMediaId) { notify('請先匯入位置圖。', true); return; }
       placingPointId = target.dataset.place;
@@ -486,12 +633,18 @@ function bindActions() {
       if (index !== project.setups.length - 1 || setup.fsPointId) return;
       if (!validReading(setup.bs)) { notify('請先填妥本測站的後視 BS。', true); return; }
       if (!point(pointId) || !validReading(value)) { notify('請選擇下一個點位並填入有效讀數。', true); return; }
-      if (role === 'FS') { setup.fsPointId = pointId; setup.fs = value; }
-      else setup.intermediate.push({ pointId, value });
-      draftNextPointId = ''; draftNextValue = '';
+      if (role === 'FINISH' && pointId !== project.route.endId) { notify(`終點前視須選預定終點 ${code(project.route.endId)}。`, true); return; }
+      if (role === 'MOVE' && pointId === project.route.endId) { notify('已到預定終點，請選「終點前視」。', true); return; }
+      if (role === 'IS' && pointId === project.route.endId) { notify('預定終點應記為前視 FS。', true); return; }
+      if (role === 'MOVE' || role === 'FINISH') {
+        setup.fsPointId = pointId; setup.fs = value;
+        if (role === 'MOVE') project.setups.push({ bsPointId: pointId, bs: '', intermediate: [], fsPointId: '', fs: '', distance: '' });
+      } else setup.intermediate.push({ pointId, value });
+      draftNextPointId = ''; draftNextValue = ''; draftNextRole = 'IS';
       renderStations(); queueSave(true);
       if (role === 'IS') $('#nextPoint')?.focus();
-      else if (pointId !== project.route.endId) $('#addStation')?.focus();
+      else if (role === 'MOVE') $(`[data-field="bs"][data-station="${project.setups.length - 1}"]`)?.focus();
+      else switchTab('result');
       return;
     }
     if (target.dataset.convertIs) {
@@ -589,8 +742,12 @@ function bindActions() {
     $('#mapFrame').classList.remove('placing');
     $('#mapHint').textContent = '點位已放到圖上；可隨時選擇「移動圖上標記」。';
     renderPoints(); queueSave(true);
+    if ($('#fieldMapDialog').open) closeFieldMap();
   };
+  $('#closeFieldMap').onclick = closeFieldMap;
+  $('#fieldMapDialog').addEventListener('cancel', event => { event.preventDefault(); closeFieldMap(); });
   $('#mapFile').onchange = event => { addImage(event.target.files[0], 'map'); event.target.value = ''; };
+  $('#fieldMapFile').onchange = event => { addImage(event.target.files[0], 'map'); event.target.value = ''; };
   $('#pasteMap').onclick = async () => {
     try {
       if (!navigator.clipboard?.read) throw new Error('此瀏覽器不支援直接讀取剪貼簿');
@@ -615,6 +772,9 @@ function bindActions() {
   $('#equipmentGallery').onchange = event => { addImage(event.target.files[0], 'equipment'); event.target.value = ''; };
   $('#exportBackup').onclick = exportBackup;
   $('#exportBackup2').onclick = exportBackup;
+  $('#exportPhotoTask').onclick = () => exportPhotoWork('task');
+  $('#exportPhotoResult').onclick = () => exportPhotoWork('result');
+  $('#mergePhotoBackup').onchange = event => { mergePhotoBackup(event.target.files[0]); event.target.value = ''; };
   $('#importBackup').onchange = event => { importBackup(event.target.files[0]); event.target.value = ''; };
   $('#newCase').onclick = async () => {
     if (!confirm('建立新案件將取代此裝置的目前案件與照片。請先匯出完整案件檔。確定繼續？')) return;
@@ -635,15 +795,15 @@ async function printReport() {
   await renderPhotos();
   const image = $('#mapImage');
   const mapWidthMm = image.naturalWidth && image.naturalHeight ? Math.min(180, 125 * image.naturalWidth / image.naturalHeight) : 180;
-  const map = project.mapMediaId && mapUrl ? `<div class="print-map" style="width:${mapWidthMm.toFixed(2)}mm"><img src="${mapUrl}" alt="水準測量點位圖">${project.points.filter(item => item.position).map(item => `<span class="map-marker ${safe(item.type.toLowerCase())}" style="left:${item.position.x}%;top:${item.position.y}%"><b>${safe(item.code)}</b></span>`).join('')}</div>` : '<p>未附位置圖</p>';
-  const photos = project.photos.map(photo => `<article class="print-photo"><p><strong>點位 ${safe(code(photo.pointId))}</strong>｜${safe(photo.description || point(photo.pointId)?.description || '未填位置說明')}</p><img src="${safe(photoUrls.get(photo.id) || '')}" alt="${safe(code(photo.pointId))} 照片"><small>原檔：${safe(photo.name)}｜加入日期：${safe(photo.addedAt.slice(0, 10))}</small></article>`).join('');
+  const map = project.mapMediaId && mapUrl ? `<div class="print-map" style="width:${mapWidthMm.toFixed(2)}mm"><img src="${mapUrl}" alt="水準測量點位圖">${project.points.filter(item => validPosition(item.position)).map(item => `<span class="map-marker ${safe(item.type.toLowerCase())}" style="left:${item.position.x}%;top:${item.position.y}%"><b>${safe(item.code)}</b></span>`).join('')}</div>` : '<p>未附位置圖</p>';
+  const photos = project.photos.map(photo => `<article class="print-photo"><p><strong>點位 ${safe(code(photo.pointId))}</strong>｜${safe(photo.description || point(photo.pointId)?.description || '未填位置說明')}</p><img src="${safe(photoUrls.get(photo.id) || '')}" alt="${safe(code(photo.pointId))} 照片"><small>攝影者：${safe(photo.photographer || '未記錄')}｜原檔：${safe(photo.name)}｜加入日期：${safe(photo.addedAt.slice(0, 10))}</small></article>`).join('');
   const referenceEquipmentPhoto = project.instrument.toUpperCase().includes(DEFAULT_INSTRUMENT) ? '<article class="print-photo"><p><strong>PENTAX AP-128 水準儀</strong>｜公司設備參考照，非本案測量當日拍攝。</p><img src="./equipment/pentax-ap-128-source.png" alt="PENTAX AP-128 公司設備參考照"><small>來源：使用者提供之原始照片，原圖保留。</small></article>' : '';
   const equipmentPhotos = project.equipmentPhotos.map(photo => `<article class="print-photo"><p><strong>${safe(photo.instrument)} 本案設備照片</strong>｜${safe(photo.description || '未填設備說明')}</p><img src="${safe(equipmentPhotoUrls.get(photo.id) || '')}" alt="${safe(photo.instrument)} 設備照片"><small>原檔：${safe(photo.name)}｜加入日期：${safe(photo.addedAt.slice(0, 10))}</small></article>`).join('');
   const status = result.withinTolerance === true ? '符合輸入容許值' : result.withinTolerance === false ? '超出容許值，未進行改正' : '尚未完成閉合檢核';
   const report = document.createElement('section');
   report.id = 'printPanel';
-  report.innerHTML = `<header class="print-title"><small>水準測量現場紀錄 V${VERSION}</small><h1>${safe(project.name || '水準測量成果')}</h1><p>案件編號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}　觀測者：${safe(project.observer || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p></header>
-    <h2>一、測線與點位</h2><p>測線：${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}；起點已知高程：${formatHeight(result.startHeight)} m；終點已知高程：${formatHeight(result.endHeight)} m。</p>
+  report.innerHTML = `<header class="print-title"><small>水準測量現場紀錄 V${VERSION}</small><h1>${safe(project.name || '水準測量成果')}</h1><p>案件編號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}　儀器觀測者：${safe(project.observer || '未填')}　扶尺人員：${safe(project.rodHolder || '未填')}　攝影者：${safe(project.photographer || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p></header>
+    <h2>一、測線與點位</h2><p>測線：${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}；起點${project.route.startHeightKind === 'assumed' ? '假設' : '已知'}高程：${formatHeight(result.startHeight)} m；${project.route.startId === project.route.endId ? '回測起點高程' : '終點已知高程'}：${formatHeight(result.endHeight)} m。</p>
     <p>約略地址／路名：${safe(project.approxLocation || '未填')}。底圖來源：${safe(project.mapSource || '未填')}。位置圖僅供示意，不作測線長度量測。</p>${map}
     <table class="point-print-table"><thead><tr><th>點號</th><th>類別</th><th>位置說明</th></tr></thead><tbody>${project.points.map(item => `<tr><td>${safe(item.code)}</td><td>${safe(item.type)}</td><td>${safe(item.description || '—')}</td></tr>`).join('')}</tbody></table>
     <h2>二、原始讀數與高程成果</h2>${printTable(result)}
@@ -677,6 +837,7 @@ async function main() {
     if (!project.schema || project.schema !== 1) throw new Error('本機案件格式不受此版本支援。');
     const migrated = normalizeProject();
     bindInputs(); bindActions(); renderAll();
+    if (project.photoTaskMode) switchTab('photos');
     $('#saveState').textContent = '已載入本機案件';
     if (migrated) queueSave(true);
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});

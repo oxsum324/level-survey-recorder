@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#164348">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <title>水準測量現場紀錄 V0.3.0</title>
+  <title>水準測量現場紀錄 V0.4.0</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.3.0</span></h1></div><span id="saveState" role="status">載入中</span></header>
-  <nav class="tabs" aria-label="工作項目"><button data-tab="route" class="active">① 測線與點位</button><button data-tab="measure">② 現場讀數</button><button data-tab="photos">③ 照片與成果</button></nav>
+  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.4.0</span></h1></div><span id="saveState" role="status">載入中</span></header>
+  <nav class="tabs" aria-label="工作項目"><button data-tab="route" class="active">① 案件與位置</button><button data-tab="measure">② 觀測讀數</button><button data-tab="photos">③ 點位攝影</button><button data-tab="result">④ 計算與成果</button></nav>
   <main>
     <section id="routePanel" class="tab-panel">
       <div class="section-head"><h2>案件與測線</h2><p>先指定起訖點；同一 BM 回測時，起點與終點選同一點。</p></div>
@@ -20,41 +20,50 @@
         <label>案件名稱<input id="caseName" maxlength="120" placeholder="例如 ○○工程鄰房現況鑑定"></label>
         <label>案件編號<input id="caseNo" maxlength="80"></label>
         <label>測量日期<input id="surveyDate" type="date"></label>
-        <label>觀測者<input id="observer" maxlength="80"></label>
+        <label>儀器觀測者<input id="observer" maxlength="80"></label>
+        <label>扶尺人員<input id="rodHolder" maxlength="80"></label>
         <label>儀器<input id="instrument" maxlength="120" placeholder="型號／編號"></label>
         <label>高程基準／來源<input id="datum" maxlength="200" placeholder="例如 委託單位提供控制點 P10"></label>
       </div>
       <div class="card grid two">
         <label>起點<select id="startId"></select></label>
-        <label>起點已知高程（m）<input id="startHeight" type="text" inputmode="decimal" autocomplete="off" placeholder="86.653"></label>
+        <label>起點高程（m）<input id="startHeight" type="text" inputmode="decimal" autocomplete="off" placeholder="10.000"></label>
+        <label>起點高程性質<select id="startHeightKind"><option value="assumed">假設高程</option><option value="known">已知高程</option></select></label>
         <label>預定終點<select id="endId"></select></label>
         <label id="endHeightLabel">終點已知高程（m）<input id="endHeight" type="text" inputmode="decimal" autocomplete="off" placeholder="另一已知 BM 的高程"></label>
         <label>容許閉合差（±mm，人工指定）<input id="toleranceMm" type="text" inputmode="decimal" autocomplete="off" placeholder="例如 5"></label>
         <label>改正數分配<select id="adjustMethod"><option value="stations">按測站數等分</option><option value="distance">按各站測線長度比例</option></select></label>
       </div>
-      <p class="note">容許值及分配方式須由案件指定。沒有已知終點高程或未完成測線時，只顯示暫算高程；超限時不產生改正後高程。</p>
+      <p class="note">新案件預填 BM1＝10.000 m（假設高程），可隨時改為實際值。異 BM 閉合須確認兩端使用相同高程基準。容許值及分配方式由案件指定。</p>
       <div class="section-head"><h2>點位與平面圖</h2><p>點號和觀測角色分開：S 點也可作前視、後視轉點。</p></div>
       <div class="card"><h3>尋找作業範圍</h3><label>約略地址／路名<input id="approxLocation" maxlength="160" placeholder="例如 高雄市○○路與○○街口"></label><div class="toolbar location-toolbar"><a id="openGoogleMaps" class="file-button" href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer">在 Google 地圖搜尋並選範圍</a><button id="pasteMap" type="button">貼入剪貼簿圖片</button><label class="file-button">匯入位置圖<input id="mapFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div><p class="note">在 Google 地圖選好範圍後，擷取畫面並回到本頁按 Ctrl+V，或按「貼入剪貼簿圖片」。手機可用「匯入位置圖」選擇截圖。請保留地圖原有來源標示，並填寫底圖來源及截圖日期。</p></div>
-      <div class="card"><div class="toolbar"><button id="addBM" type="button">＋ BM</button><button id="addS" type="button">＋ S</button><button id="addTP" type="button">＋ TP</button></div><p id="mapHint" class="note">新增點位並選擇「放到圖上」，再點圖面位置。底圖僅供位置示意，不以圖上距離計算測線長度。</p><div id="mapFrame" class="map-frame" tabindex="0" aria-label="案件位置圖與點位標記"><div id="mapEmpty">尚未匯入位置圖</div><img id="mapImage" alt="案件位置圖" hidden><div id="mapMarkers"></div></div><label>底圖來源／截圖日期<input id="mapSource" maxlength="240" placeholder="例如 Google Maps，截圖日期 2026-09-25；保留原圖標示"></label><div id="pointList" class="point-list"></div></div>
+      <div class="card"><div class="toolbar"><button id="addBM" type="button">＋ BM</button><button id="addS" type="button">＋ S</button><button id="addTP" type="button">＋ TP</button></div><p id="mapHint" class="note">新增點位並選擇「放到圖上」，再點圖面位置。底圖僅供位置示意，不以圖上距離計算測線長度。</p><div id="mapHome"><div id="mapFrame" class="map-frame" tabindex="0" aria-label="案件位置圖與點位標記"><div id="mapEmpty">尚未匯入位置圖</div><img id="mapImage" alt="案件位置圖" hidden><div id="mapMarkers"></div></div></div><label>底圖來源／截圖日期<input id="mapSource" maxlength="240" placeholder="例如 Google Maps，截圖日期 2026-09-25；保留原圖標示"></label><div id="pointList" class="point-list"></div></div>
       <div class="toolbar bottom"><button id="exportBackup" type="button">匯出完整案件檔</button><label class="file-button">開啟案件檔<input id="importBackup" type="file" accept=".json,application/json" hidden></label><button id="newCase" type="button" class="danger">建立新案件</button></div>
     </section>
     <section id="measurePanel" class="tab-panel" hidden>
-      <div class="section-head"><h2>逐點觀測</h2><p id="routeSummary"></p><p>每一點選「中間視」或「前視」。換站時，前視點會接續成下一站的後視點，兩個讀數顯示在同一列。</p></div>
+      <div class="section-head"><h2>儀器旁的讀數紀錄</h2><p id="routeSummary"></p><p>儀器觀測者只記錄讀數與換站；扶尺人員留在點位。點位攝影可由另一人稍後完成。</p></div>
       <div id="stationList"></div>
-      <div class="toolbar bottom"><button id="addStation" type="button" class="primary">＋ 新增測站</button><button id="quickS" type="button">＋ 新增 S 點</button><button id="quickTP" type="button">＋ 新增 TP 點</button></div>
-      <div class="card result-card"><h2>即時計算與閉合檢核</h2><div id="resultSummary"></div><div id="resultTable"></div><p id="resultNote" class="note"></p></div>
+      <div class="toolbar bottom"><button id="addStation" type="button" class="primary">開始第一站</button><button id="quickS" type="button">＋ S 點</button><button id="quickTP" type="button">＋ TP 點</button></div>
+      <p class="note">讀數完成後可點「在圖上標點」，不影響下一筆觀測。完整計算移至「計算與成果」。</p>
     </section>
     <section id="photosPanel" class="tab-panel" hidden>
+      <div class="section-head"><h2>點位攝影工作</h2><p>攝影者在水準尺所在點拍照；觀測者可持續留在儀器旁記錄讀數。照片依點號對應，與讀數分開完成。</p></div>
+      <div class="card grid two"><label>攝影者<input id="photographer" maxlength="80" placeholder="可與儀器觀測者不同"></label><label>照片對應點位<select id="photoPoint"></select></label><label>位置說明<input id="photoDescription" maxlength="300" placeholder="例如 圍牆轉角處鋼釘；水準尺底端所在點"></label><div class="toolbar"><label class="file-button primary">開啟相機拍照<input id="photoFile" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden></label><label class="file-button">從相簿／檔案選擇<input id="photoGallery" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div></div>
+      <p id="photoProgress" class="note"></p><div id="photoQueue" class="toolbar photo-queue"></div>
+      <div class="card"><h3>不同裝置的攝影協作</h3><p class="note">觀測者先匯出攝影工作檔交給攝影者。攝影者在自己的手機開啟同一網站，從「① 案件與位置」按「開啟案件檔」載入；可拍照並在圖上標點，完成後按「匯出攝影成果」。觀測者按「合併攝影成果」回收新照片、未填的位置與說明；已有讀數與標註不會被覆蓋。不同裝置不會自動同步。</p><div class="toolbar"><button id="exportPhotoTask" type="button">交付攝影者工作檔</button><button id="exportPhotoResult" type="button">匯出攝影成果</button><label class="file-button">合併攝影成果<input id="mergePhotoBackup" type="file" accept=".json,application/json" hidden></label></div></div>
+      <div id="photoList" class="photo-grid"></div>
       <div class="section-head"><h2>設備照片</h2><p>公司設備參考照與本案現場拍攝照片分開記錄。</p></div>
       <div class="photo-grid"><article class="photo-card reference-photo"><div class="photo-preview"><img src="./equipment/pentax-ap-128-source.png" alt="PENTAX AP-128 水準儀，公司提供之設備參考照"></div><div class="photo-body"><strong>PENTAX AP-128 水準儀</strong><small>公司提供之設備參考照（原圖保留）</small><p class="note">供型號辨識；不代表本案測量當日拍攝。</p></div></article></div>
       <div class="card grid two"><label>本案設備照片說明<input id="equipmentDescription" maxlength="300" placeholder="例如 儀器編號、架設位置與拍攝時間"></label><div class="toolbar"><label class="file-button primary">拍攝本案設備<input id="equipmentFile" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden></label><label class="file-button">從相簿／檔案選擇<input id="equipmentGallery" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div></div>
       <div id="equipmentPhotoList" class="photo-grid"></div>
-      <div class="section-head"><h2>點位照片與成果</h2><p>每張照片連到一個點位，並保留原始圖檔。</p></div>
-      <div class="card grid two"><label>照片對應點位<select id="photoPoint"></select></label><label>位置說明<input id="photoDescription" maxlength="300" placeholder="例如 圍牆轉角處鋼釘；水準尺底端所在點"></label><label class="file-button primary">開啟相機拍照<input id="photoFile" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden></label><label class="file-button">從相簿／檔案選擇<input id="photoGallery" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div>
-      <div id="photoList" class="photo-grid"></div>
+    </section>
+    <section id="resultPanel" class="tab-panel" hidden>
+      <div class="section-head"><h2>計算與閉合檢核</h2><p>原始讀數、暫算高程與改正後高程分列；現場輸入時可專注目前測站。</p></div>
+      <div class="card result-card"><div id="resultSummary"></div><div id="resultTable"></div><p id="resultNote" class="note"></p></div>
       <div class="card"><h2>成果交付</h2><p class="note">列印內容含點位圖、原始讀數、閉合檢核、改正後高程、點位照片及設備照片。公司設備參考照會註明來源與性質；另請匯出完整案件檔保存可編輯資料及本案圖像原檔。</p><button id="printReport" type="button" class="primary">列印／另存 PDF</button><button id="exportBackup2" type="button">匯出完整案件檔</button></div>
     </section>
   </main>
+  <dialog id="fieldMapDialog" class="field-map-dialog" aria-labelledby="fieldMapTitle"><div class="dialog-head"><h2 id="fieldMapTitle">點位標註</h2><button id="closeFieldMap" type="button">關閉</button></div><p id="fieldMapMessage" class="note"></p><div class="toolbar"><a id="fieldGoogleMaps" class="file-button" href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer">開啟 Google 地圖</a><label class="file-button">匯入位置圖<input id="fieldMapFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div><label>底圖來源／截圖日期<input id="fieldMapSource" maxlength="240" placeholder="例如 Google Maps，截圖日期 2026-09-27"></label><div id="fieldMapHolder"></div><p class="note">點圖面即可放置標記；暫不標註也可關閉，稍後再補。</p></dialog>
   <div id="message" role="alert" hidden></div>
 </body>
 </html>

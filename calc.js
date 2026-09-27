@@ -1,4 +1,4 @@
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 
 function numberOf(value) {
   const text = String(value ?? '').trim().replace(',', '.');
@@ -18,6 +18,7 @@ export function calculate(project) {
   const route = project.route || {};
   const startHeight = numberOf(route.startHeight);
   const endHeight = route.startId === route.endId ? startHeight : numberOf(route.endHeight);
+  const compatibleDatum = route.startId === route.endId || route.startHeightKind !== 'assumed';
   const toleranceMm = numberOf(route.toleranceMm);
   const setups = project.setups || [];
   const stations = [];
@@ -29,6 +30,7 @@ export function calculate(project) {
   if (!points.has(route.startId) || !points.has(route.endId)) issues.push('請指定已建立的起點及終點。');
   if (startHeight === null) issues.push('請輸入起點的已知高程。');
   if (route.startId !== route.endId && endHeight === null) issues.push('不同終點須輸入終點的已知高程，才能檢核閉合差。');
+  if (!compatibleDatum) issues.push('起點仍標為假設高程；與另一已知 BM 閉合前，須確認兩端高程基準相同並改為已知高程。');
   if (toleranceMm !== null && toleranceMm < 0) issues.push('容許閉合差須為零或正值。');
 
   for (let i = 0; i < setups.length; i++) {
@@ -79,7 +81,7 @@ export function calculate(project) {
   const complete = points.has(route.startId) && points.has(route.endId) && startHeight !== null && setups.length > 0 && stations.length === setups.length && stations.every(station => station.complete) && anchor === route.endId && endHeight !== null;
   if (setups.length && stations.length === setups.length && stations.every(station => station.complete) && anchor !== route.endId) issues.push('最後前視點尚未到達預定終點。');
   const closureMm = complete ? (height - endHeight) * 1000 : null;
-  const withinTolerance = complete && toleranceMm !== null && toleranceMm >= 0
+  const withinTolerance = complete && compatibleDatum && toleranceMm !== null && toleranceMm >= 0
     ? Math.abs(closureMm) <= toleranceMm + 1e-7 : null;
   const method = route.adjustMethod === 'distance' ? 'distance' : 'stations';
   let adjusted = false;

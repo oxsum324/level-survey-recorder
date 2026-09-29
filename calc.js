@@ -1,4 +1,4 @@
-export const VERSION = '0.4.4';
+export const VERSION = '0.5.0';
 
 function numberOf(value) {
   const text = String(value ?? '').trim().replace(',', '.');
@@ -20,6 +20,76 @@ function reading(value, inverted = false) {
   return n === null || n < 0 ? null : inverted ? -n : n;
 }
 
+const cleanZero = value => Math.abs(value) < 1e-9 ? 0 : value;
+
+export function analyzeThreeWire(middle, upperValue, lowerValue, staffLengthM = 5, multiplier = 100, toleranceMm = null) {
+  const entered = value => String(value ?? '').trim() !== '';
+  if (!entered(upperValue) && !entered(lowerValue)) return null;
+  const upper = numberOf(upperValue);
+  const lower = numberOf(lowerValue);
+  if (upper === null || lower === null) return { issue: '上絲與下絲須同時填入有效讀數。' };
+  if (upper < 0 || lower < 0 || upper > staffLengthM || lower > staffLengthM) return { issue: '上絲或下絲讀數超出水準尺範圍。' };
+  if (upper <= lower) return { issue: '上絲讀數須大於下絲讀數，請核對尺面方向。' };
+  const middleDiffMm = (Math.abs(middle) - (upper + lower) / 2) * 1000;
+  return {
+    upper, lower, middleDiffMm,
+    distanceM: multiplier !== null && multiplier > 0 ? multiplier * (upper - lower) : null,
+    exceedsTolerance: toleranceMm !== null && toleranceMm >= 0 ? Math.abs(middleDiffMm) > toleranceMm + 1e-7 : null,
+  };
+}
+
+export function formulaToleranceMm(cValue, setups) {
+  const c = numberOf(cValue);
+  if (c === null || c <= 0) return { issue: '請輸入大於零的 C 值（mm）。' };
+  if (!Array.isArray(setups) || !setups.length) return { issue: '尚無測站長度，無法計算容許值。' };
+  const lengths = setups.map(setup => numberOf(setup.distance));
+  if (lengths.some(length => length === null || length <= 0)) return { issue: '每站須先填入大於零的測線長度，才能使用公式。' };
+  const lengthKm = lengths.reduce((sum, length) => sum + length, 0) / 1000;
+  return { lengthKm, valueMm: Math.round(c * Math.sqrt(lengthKm) * 100) / 100 };
+}
+
+export function twoPegCheck(record) {
+  const values = ['a1', 'b1', 'a2', 'b2'].map(key => numberOf(record?.[key]));
+  const distanceM = numberOf(record?.distanceM);
+  if (values.some(value => value === null) || distanceM === null) return null;
+  if (distanceM <= 0) return { issue: '兩樁距離須大於零。' };
+  const errorMm = ((values[2] - values[3]) - (values[0] - values[1])) * 1000;
+  return { errorMm, per100mMm: errorMm * 100 / distanceM };
+}
+
+function riseFallCheck(stations, startHeight, complete, sumBS, sumFS, rawEndHeight) {
+  let height = startHeight;
+  let sumRise = 0;
+  let sumFall = 0;
+  let maxDiffMm = 0;
+  let compared = 0;
+  for (const station of stations) {
+    let previousReading = station.bs;
+    for (const sight of station.intermediate) {
+      const difference = previousReading - sight.value;
+      if (difference >= 0) sumRise += difference;
+      else sumFall -= difference;
+      height += difference;
+      maxDiffMm = Math.max(maxDiffMm, Math.abs(height - sight.rawHeight) * 1000);
+      compared++;
+      previousReading = sight.value;
+    }
+    if (station.complete) {
+      const difference = previousReading - station.fs;
+      if (difference >= 0) sumRise += difference;
+      else sumFall -= difference;
+      height += difference;
+      maxDiffMm = Math.max(maxDiffMm, Math.abs(height - station.rawEndHeight) * 1000);
+      compared++;
+    }
+  }
+  const delta = complete ? rawEndHeight - startHeight : null;
+  const ok = complete ? maxDiffMm <= 0.5 + 1e-7
+    && Math.abs(sumRise - sumFall - delta) <= 0.0005 + 1e-9
+    && Math.abs(sumBS - sumFS - delta) <= 0.0005 + 1e-9 : null;
+  return { sumRise, sumFall, ok, maxDiffMm: compared ? maxDiffMm : null, endHeight: complete ? height : null };
+}
+
 export function calculate(project) {
   const issues = [];
   const points = new Map((project.points || []).map(point => [point.id, point]));
@@ -29,8 +99,11 @@ export function calculate(project) {
   const compatibleDatum = route.startId === route.endId || route.startHeightKind !== 'assumed';
   const toleranceMm = numberOf(route.toleranceMm);
   const staffLengthM = route.staffLengthM === undefined ? 5 : numberOf(route.staffLengthM);
+  const stadiaConstantK = route.stadiaConstantK === undefined ? 100 : numberOf(route.stadiaConstantK);
+  const threeWireToleranceMm = numberOf(route.threeWireToleranceMm);
   const setups = project.setups || [];
   const stations = [];
+  const threeWireAlerts = [];
   let anchor = route.startId;
   let height = startHeight;
   let sumBS = 0;
@@ -60,6 +133,8 @@ export function calculate(project) {
     }
     if (height === null) break;
     const instrumentHeight = height + bs;
+    const bsWire = analyzeThreeWire(bs, setup.bsUpper, setup.bsLower, staffLengthM, stadiaConstantK, threeWireToleranceMm);
+    if (bsWire?.issue || bsWire?.exceedsTolerance) threeWireAlerts.push(`${label}後視：${bsWire.issue || `三絲中值差 ${formatMm(bsWire.middleDiffMm)} mm 超過輸入容許值 ${formatMm(threeWireToleranceMm)} mm。`}`);
     const intermediate = [];
     let invalidIntermediate = false;
     for (const sight of setup.intermediate || []) {
@@ -71,7 +146,9 @@ export function calculate(project) {
         invalidIntermediate = true;
         break;
       }
-      intermediate.push({ pointId: sight.pointId, value, inverted: !!sight.inverted, rawHeight: instrumentHeight - value });
+      const wire = analyzeThreeWire(value, sight.upper, sight.lower, staffLengthM, stadiaConstantK, threeWireToleranceMm);
+      if (wire?.issue || wire?.exceedsTolerance) threeWireAlerts.push(`${label}中間視 ${points.get(sight.pointId)?.code || ''}：${wire.issue || `三絲中值差 ${formatMm(wire.middleDiffMm)} mm 超過輸入容許值 ${formatMm(threeWireToleranceMm)} mm。`}`);
+      intermediate.push({ pointId: sight.pointId, value, inverted: !!sight.inverted, wire, rawHeight: instrumentHeight - value });
     }
     if (invalidIntermediate) break;
     const distance = numberOf(setup.distance);
@@ -79,8 +156,14 @@ export function calculate(project) {
     if (fsIssue) { issues.push(fsIssue); break; }
     const fs = reading(setup.fs, setup.fsInverted);
     const stationComplete = fs !== null && points.has(setup.fsPointId);
+    const fsWire = fs !== null ? analyzeThreeWire(fs, setup.fsUpper, setup.fsLower, staffLengthM, stadiaConstantK, threeWireToleranceMm) : null;
+    if (fsWire?.issue || fsWire?.exceedsTolerance) threeWireAlerts.push(`${label}前視：${fsWire.issue || `三絲中值差 ${formatMm(fsWire.middleDiffMm)} mm 超過輸入容許值 ${formatMm(threeWireToleranceMm)} mm。`}`);
+    const bsDistanceM = bsWire?.distanceM ?? null;
+    const fsDistanceM = fsWire?.distanceM ?? null;
     stations.push({
       index: i + 1, bsPointId: anchor, bs, bsInverted: !!setup.bsInverted, fsPointId: setup.fsPointId, fs, fsInverted: !!setup.fsInverted,
+      bsWire, fsWire, bsDistanceM, fsDistanceM,
+      distanceDifferenceM: bsDistanceM !== null && fsDistanceM !== null ? cleanZero(bsDistanceM - fsDistanceM) : null,
       instrumentHeight, intermediate, rawStartHeight: height,
       rawEndHeight: stationComplete ? instrumentHeight - fs : null, distance,
       complete: stationComplete,
@@ -98,11 +181,16 @@ export function calculate(project) {
   const complete = points.has(route.startId) && points.has(route.endId) && startHeight !== null && setups.length > 0 && stations.length === setups.length && stations.every(station => station.complete) && anchor === route.endId && endHeight !== null;
   if (setups.length && stations.length === setups.length && stations.every(station => station.complete) && anchor !== route.endId) issues.push('最後前視點尚未到達預定終點。');
   const closureMm = complete ? (height - endHeight) * 1000 : null;
+  const riseFall = riseFallCheck(stations, startHeight, complete, sumBS, sumFS, complete ? height : null);
+  if (riseFall.ok === false) issues.push('高差法與視準軸高法計算不一致，請核對原始讀數。');
+  const sumBsDistanceM = stations.reduce((sum, station) => sum + (station.bsDistanceM || 0), 0);
+  const sumFsDistanceM = stations.reduce((sum, station) => sum + (station.fsDistanceM || 0), 0);
+  if (stations.some(station => station.bsWire || station.fsWire) && (stadiaConstantK === null || stadiaConstantK <= 0)) threeWireAlerts.push('視距乘常數 K 須為大於零的數值。');
   const withinTolerance = complete && compatibleDatum && toleranceMm !== null && toleranceMm >= 0
     ? Math.abs(closureMm) <= toleranceMm + 1e-7 : null;
   const method = route.adjustMethod === 'distance' ? 'distance' : 'stations';
   let adjusted = false;
-  if (withinTolerance === true) {
+  if (withinTolerance === true && riseFall.ok !== false) {
     if (method === 'distance' && stations.some(station => station.distance === null || station.distance <= 0)) {
       issues.push('按距離分配改正數時，每站須填入大於零的測線長度。');
     } else {
@@ -126,7 +214,8 @@ export function calculate(project) {
   return {
     issues, stations, complete, adjusted, method, startHeight, endHeight,
     rawEndHeight: complete ? height : null, closureMm, toleranceMm, withinTolerance,
-    sumBS, sumFS,
+    sumBS, sumFS, riseFallCheck: riseFall, threeWireAlerts,
+    sumBsDistanceM, sumFsDistanceM, sumDistanceDifferenceM: cleanZero(sumBsDistanceM - sumFsDistanceM),
   };
 }
 
@@ -136,4 +225,49 @@ export function formatHeight(value) {
 
 export function formatMm(value) {
   return value === null || value === undefined || !Number.isFinite(value) ? '—' : value.toFixed(2);
+}
+
+function csvCell(value, numeric = false) {
+  let text = String(value ?? '');
+  if (!numeric && /^[\s]*[=+\-@]/.test(text)) text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+export function buildSummaryCsv(project, result = calculate(project)) {
+  const points = new Map((project.points || []).map(point => [point.id, point]));
+  const pointCode = id => points.get(id)?.code || '';
+  const pointType = id => points.get(id)?.type || '';
+  const rows = [];
+  const row = values => rows.push(values.map(value => csvCell(value)).join(','));
+  row(['案件名稱', project.name || '']);
+  row(['案件編號', project.number || '']);
+  row(['測量日期', project.date || '']);
+  row(['起點', pointCode(project.route?.startId)]);
+  row(['終點', pointCode(project.route?.endId)]);
+  row(['容許閉合差（mm）', result.toleranceMm === null ? '未指定' : formatMm(result.toleranceMm)]);
+  row(['容許值依據', project.route?.toleranceBasis || '']);
+  row(['閉合差（mm）', result.complete ? formatMm(result.closureMm) : '未完成']);
+  row(['是否已改正', result.adjusted ? '是' : '否']);
+  rows.push('');
+  row(['測站', '點號', '點位類別', '後視', '中間視', '前視', '倒尺註記', '視準軸高', '原始高程', '改正數', '改正後高程', '測線長度', '備註']);
+  const readingText = value => value === null ? '' : formatHeight(Math.abs(value));
+  const correctionText = (raw, adjusted) => result.adjusted && adjusted !== null && adjusted !== undefined ? formatMm((adjusted - raw) * 1000) : '';
+  const addReading = (station, id, role, value, inverted, rawHeight, adjustedHeight, distance, note) => {
+    const cells = [
+      station.index, pointCode(id), pointType(id), role === 'BS' ? readingText(value) : '',
+      role === 'IS' ? readingText(value) : '', role === 'FS' ? readingText(value) : '',
+      inverted ? `${role} 倒尺` : '', formatHeight(station.instrumentHeight), formatHeight(rawHeight),
+      correctionText(rawHeight, adjustedHeight), result.adjusted ? formatHeight(adjustedHeight) : '',
+      distance === null || distance === undefined ? '' : formatHeight(distance), note,
+    ];
+    rows.push(cells.map((cell, index) => csvCell(cell, [0, 3, 4, 5, 7, 8, 9, 10, 11].includes(index))).join(','));
+  };
+  for (const station of result.stations) {
+    addReading(station, station.bsPointId, 'BS', station.bs, station.bsInverted, station.rawStartHeight, station.adjustedStartHeight, null, '測站起點後視');
+    station.intermediate.forEach((sight, index) => addReading(station, sight.pointId, 'IS', sight.value, sight.inverted,
+      sight.rawHeight, station.adjustedIntermediate?.[index]?.adjustedHeight, null, '中間視'));
+    if (station.complete) addReading(station, station.fsPointId, 'FS', station.fs, station.fsInverted,
+      station.rawEndHeight, station.adjustedEndHeight, station.distance, '本站前視');
+  }
+  return `\uFEFF${rows.join('\r\n')}\r\n`;
 }

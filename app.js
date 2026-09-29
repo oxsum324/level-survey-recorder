@@ -1,4 +1,4 @@
-import { calculate, formatHeight, formatMm, readingIssue, VERSION } from './calc.js';
+import { buildSummaryCsv, calculate, formatHeight, formatMm, formulaToleranceMm, readingIssue, twoPegCheck, VERSION } from './calc.js';
 import { loadProject, saveProject, saveMedia, loadMedia, deleteMedia, replaceProject, makeBackup, parseBackup } from './store.js';
 
 const $ = selector => document.querySelector(selector);
@@ -26,7 +26,8 @@ function blankProject() {
   return {
     schema: 1, appVersion: VERSION, id: uid(), name: '', number: '', date: new Date().toISOString().slice(0, 10),
     observer: '', rodHolder: '', photographer: '', instrument: DEFAULT_INSTRUMENT, instrumentDefaultApplied: true, datum: '', approxLocation: '', points: [bm], pointPlan: { sCount: '0', tpCount: '0' }, mapMediaId: null, mapSource: '', photos: [], equipmentPhotos: [],
-    route: { startId: bm.id, endId: bm.id, startHeight: '10.000', startHeightKind: 'assumed', endHeight: '', toleranceMm: '', staffLengthM: '5', adjustMethod: 'stations' },
+    route: { startId: bm.id, endId: bm.id, startHeight: '10.000', startHeightKind: 'assumed', endHeight: '', toleranceMm: '', toleranceBasis: '', formulaC: '', staffLengthM: '5', stadiaConstantK: '100', threeWireToleranceMm: '', adjustMethod: 'stations' },
+    instrumentCheck: { serial: '', calibrationDate: '', calibrationAgency: '', twoPeg: { a1: '', b1: '', a2: '', b2: '', distanceM: '' } },
     setups: [], routeHistory: [], updatedAt: new Date().toISOString(),
   };
 }
@@ -41,6 +42,9 @@ function normalizeProject() {
   }
   if (!project.route.startHeightKind) { project.route.startHeightKind = 'known'; changed = true; }
   if (project.route.staffLengthM === undefined) { project.route.staffLengthM = '5'; changed = true; }
+  if (project.route.stadiaConstantK === undefined) { project.route.stadiaConstantK = '100'; changed = true; }
+  if (!project.instrumentCheck) { project.instrumentCheck = { serial: '', calibrationDate: '', calibrationAgency: '', twoPeg: { a1: '', b1: '', a2: '', b2: '', distanceM: '' } }; changed = true; }
+  if (!project.instrumentCheck.twoPeg) { project.instrumentCheck.twoPeg = { a1: '', b1: '', a2: '', b2: '', distanceM: '' }; changed = true; }
   if (project.rodHolder === undefined) { project.rodHolder = ''; changed = true; }
   if (project.photographer === undefined) { project.photographer = ''; changed = true; }
   if (!project.pointPlan) { project.pointPlan = { sCount: String(project.points.filter(item => item.type === 'S').length), tpCount: String(project.points.filter(item => item.type === 'TP').length) }; changed = true; }
@@ -213,6 +217,38 @@ function updateReadingWarnings() {
   document.querySelectorAll('[data-reading]').forEach(updateReadingWarning);
 }
 
+function wireFields(setup, index, role, sightIndex = null) {
+  const item = sightIndex === null ? setup : setup.intermediate[sightIndex];
+  const upperKey = role === 'bs' ? 'bsUpper' : role === 'fs' ? 'fsUpper' : 'upper';
+  const lowerKey = role === 'bs' ? 'bsLower' : role === 'fs' ? 'fsLower' : 'lower';
+  const attr = key => sightIndex === null ? `data-wire-field="${key}" data-station="${index}"` : `data-is-wire="${index}:${sightIndex}:${key}"`;
+  const check = sightIndex === null ? `${index}:${role}` : `${index}:is:${sightIndex}`;
+  return `<details class="wire-details"><summary>上絲／下絲（選填）</summary><div class="wire-fields"><label>上絲（m）<input ${decimals} ${attr(upperKey)} value="${safe(item[upperKey])}" placeholder="0.000"></label><label>下絲（m）<input ${decimals} ${attr(lowerKey)} value="${safe(item[lowerKey])}" placeholder="0.000"></label></div><p class="wire-check" data-wire-check="${check}" hidden></p></details>`;
+}
+
+function updateWireFeedback(result = calculate(project)) {
+  const checkFor = key => {
+    const [index, role, sightIndex] = key.split(':');
+    const station = result.stations[Number(index)];
+    return role === 'bs' ? station?.bsWire : role === 'fs' ? station?.fsWire : station?.intermediate[Number(sightIndex)]?.wire;
+  };
+  document.querySelectorAll('[data-wire-check]').forEach(element => {
+    const wire = checkFor(element.dataset.wireCheck);
+    element.hidden = !wire;
+    element.classList.toggle('wire-alert', !!(wire?.issue || wire?.exceedsTolerance));
+    element.textContent = !wire ? '' : wire.issue || `中絲差 ${formatMm(wire.middleDiffMm)} mm；視距 ${formatHeight(wire.distanceM)} m${wire.exceedsTolerance ? '；超出輸入的三絲容許值' : ''}`;
+  });
+  document.querySelectorAll('[data-wire-station]').forEach(element => {
+    const station = result.stations[Number(element.dataset.wireStation)];
+    element.hidden = !station || (!station.bsWire && !station.fsWire);
+    if (station) element.textContent = `後視距 ${formatHeight(station.bsDistanceM)} m · 前視距 ${formatHeight(station.fsDistanceM)} m · 差 ${formatHeight(station.distanceDifferenceM)} m`;
+  });
+  document.querySelectorAll('[data-copy-wire-distance]').forEach(button => {
+    const station = result.stations[Number(button.dataset.copyWireDistance)];
+    button.disabled = station?.bsDistanceM === null || station?.fsDistanceM === null || !station;
+  });
+}
+
 function renderStations() {
   synchronizeSetups();
   const card = (setup, index) => {
@@ -221,20 +257,22 @@ function renderStations() {
     const recorded = (setup.intermediate || []).map((sight, sightIndex) => `<div class="reading-row"><span class="reading-role">中間視 IS</span>
       <label>點位<select data-is-point="${index}:${sightIndex}">${options(project.points, sight.pointId)}</select></label>
       <div class="reading-value"><label>讀數（m）<input ${decimals} data-reading data-is-value="${index}:${sightIndex}" value="${safe(sight.value)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-is-inverted="${index}:${sightIndex}" ${sight.inverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div>
-      <div class="reading-actions"><button type="button" data-field-map="${safe(sight.pointId)}">標圖</button>${active && sightIndex === setup.intermediate.length - 1 && !setup.fsPointId ? `<button type="button" data-convert-is="${index}:${sightIndex}">改為前視</button>` : ''}<button type="button" data-remove-is="${index}:${sightIndex}" class="quiet danger-text">移除</button></div></div>`).join('') +
+      <div class="reading-actions"><button type="button" data-field-map="${safe(sight.pointId)}">標圖</button>${active && sightIndex === setup.intermediate.length - 1 && !setup.fsPointId ? `<button type="button" data-convert-is="${index}:${sightIndex}">改為前視</button>` : ''}<button type="button" data-remove-is="${index}:${sightIndex}" class="quiet danger-text">移除</button></div>${wireFields(setup, index, 'is', sightIndex)}</div>`).join('') +
     (setup.fsPointId || setup.fs !== '' ? `<div class="reading-row turn-row"><span class="reading-role">前視 FS</span>
       <label>點位<select data-field="fsPointId" data-station="${index}">${options(project.points, setup.fsPointId)}</select></label>
       <div class="reading-value"><label>讀數（m）<input ${decimals} data-reading data-field="fs" data-station="${index}" value="${safe(setup.fs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="fsInverted" data-station="${index}" ${setup.fsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div>
-      <div class="reading-actions"><button type="button" data-field-map="${safe(setup.fsPointId)}">標圖</button>${active ? `<button type="button" data-convert-fs="${index}" class="quiet">改為中間視</button>` : ''}</div></div>` : '');
+      <div class="reading-actions"><button type="button" data-field-map="${safe(setup.fsPointId)}">標圖</button>${active ? `<button type="button" data-convert-fs="${index}" class="quiet">改為中間視</button>` : ''}</div>${wireFields(setup, index, 'fs')}</div>` : '');
     return `<section class="card station ${active ? 'active-station' : ''}" data-station="${index}">
       <div class="station-head"><h3>測站 ${index + 1} <small>由 ${safe(code(setup.bsPointId))} 後視</small></h3><button type="button" data-remove-station="${index}" class="quiet danger-text" title="刪除此站及後續站">刪除</button></div>
       <div class="bs-entry reading-value"><label>後視 BS · ${safe(code(setup.bsPointId))}<input ${decimals} data-reading data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="bsInverted" data-station="${index}" ${setup.bsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div>
+      ${wireFields(setup, index, 'bs')}
       ${waitingForNext ? `<div class="next-reading"><div class="next-point-line"><label>下一點<select id="nextPoint">${nextPointOptions(draftNextPointId)}</select></label></div><div class="next-point-tools"><button type="button" data-next-unobserved="true">選下一未測點</button><button type="button" data-quick-point="S">＋S</button><button type="button" data-quick-point="TP">＋TP</button></div>
         <div class="next-value-line"><label>讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 · 同站</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視 · 換站</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>前視 · 終點</option></select></label><div class="reading-value"><label>讀數（m）<input id="nextReading" data-reading ${decimals} value="${safe(draftNextValue)}" placeholder="0.000"></label><label class="inverted-toggle"><input id="nextInverted" type="checkbox" ${draftNextInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div></div>
         <button type="button" data-add-next="${index}" class="primary record-next">記錄此點</button></div>` : ''}
       <details class="station-records"><summary>${setup.fsPointId ? `前視 ${safe(code(setup.fsPointId))} · ${safe(setup.fs)} m` : `本站已記錄 ${(setup.intermediate || []).length} 點`} · 點開核對</summary>
         <div class="reading-actions"><button type="button" data-field-map="${safe(setup.bsPointId)}">標註 ${safe(code(setup.bsPointId))}</button></div>${recorded}
         <label class="station-distance">測線長度（m，按距離分配時填）<input ${decimals} data-field="distance" data-station="${index}" value="${safe(setup.distance)}" placeholder="例如 35.0"></label>
+        <p class="wire-station-summary" data-wire-station="${index}" hidden></p><button type="button" data-copy-wire-distance="${index}" disabled>由後視距＋前視距帶入本站長度</button>
       </details>
     </section>`;
   };
@@ -248,6 +286,7 @@ function renderStations() {
   renderResult();
   renderPhotoQueue();
   updateReadingWarnings();
+  updateWireFeedback();
 }
 
 function openFieldMap(pointId) {
@@ -311,6 +350,26 @@ function summaryChecks(result) {
   return `<span>ΣBS <strong>${formatHeight(result.sumBS)} m</strong></span><span>ΣFS <strong>${formatHeight(result.sumFS)} m</strong></span><span>閉合差 <strong>${formatMm(result.closureMm)} mm</strong></span><span>容許值 <strong>${result.toleranceMm === null ? '未指定' : `±${formatMm(result.toleranceMm)} mm`}</strong></span><span>改正 <strong>${method}</strong></span>`;
 }
 
+function arithmeticSummary(result) {
+  if (!result.complete) return '<section class="analysis-panel"><h3>算術複核</h3><p>測線完成後顯示兩種高差計算。</p></section>';
+  const delta = result.rawEndHeight - result.startHeight;
+  const check = result.riseFallCheck;
+  return `<section class="analysis-panel"><h3>算術複核 <span class="${check.ok ? 'check-ok' : 'check-alert'}">${check.ok ? '計算一致' : '計算不一致'}</span></h3>
+    <p>ΣBS − ΣFS：${formatHeight(result.sumBS - result.sumFS)} m ＝ 終點 − 起點：${formatHeight(delta)} m</p>
+    <p>Σ升 − Σ降：${formatHeight(check.sumRise - check.sumFall)} m ＝ 終點 − 起點：${formatHeight(delta)} m</p>
+    <p>兩法點高程最大差：${formatMm(check.maxDiffMm)} mm</p></section>`;
+}
+
+function sightBalanceSummary(result) {
+  if (!result.stations.some(station => station.bsWire || station.fsWire || station.intermediate.some(sight => sight.wire))) return '';
+  const hasBS = result.stations.some(station => station.bsDistanceM !== null);
+  const hasFS = result.stations.some(station => station.fsDistanceM !== null);
+  return `<section class="analysis-panel"><h3>三絲視距</h3><div class="sight-grid">${result.stations.map(station =>
+    `<div>第 ${station.index} 站 · 後視 ${formatHeight(station.bsDistanceM)} m／前視 ${formatHeight(station.fsDistanceM)} m／差 ${formatHeight(station.distanceDifferenceM)} m</div>`).join('')}</div>
+    <p>累計 Σ後視距 ${formatHeight(hasBS ? result.sumBsDistanceM : null)} m；Σ前視距 ${formatHeight(hasFS ? result.sumFsDistanceM : null)} m；差 ${formatHeight(hasBS && hasFS ? result.sumDistanceDifferenceM : null)} m。</p>
+    ${result.threeWireAlerts.length ? `<p class="wire-alert">${safe(result.threeWireAlerts.join('；'))}</p>` : ''}</section>`;
+}
+
 function renderResult() {
   const result = calculate(project);
   const state = result.withinTolerance === true ? 'ok' : result.withinTolerance === false ? 'over' : 'pending';
@@ -319,7 +378,9 @@ function renderResult() {
   const gauge = result.complete && result.toleranceMm > 0 ? Math.min(100, Math.abs(result.closureMm) / result.toleranceMm * 100) : null;
   $('#resultSummary').innerHTML = `<div class="result-hero ${state}"><div><span class="result-eyebrow">${safe(code(project.route.startId))} → ${safe(code(project.route.endId))} · ${result.stations.length} 站</span><span class="result-hero-label">閉合差</span><strong class="result-hero-value">${result.complete ? formatMm(result.closureMm) : '待完成'}${result.complete ? '<small> mm</small>' : ''}</strong><span class="result-status">${status}</span></div><div class="result-hero-side"><span>指定容許值</span><strong>${limit}</strong><span>實測終點高程</span><strong>${formatHeight(result.rawEndHeight)} m</strong></div></div>
     ${gauge !== null ? `<div class="result-gauge" aria-label="閉合差佔容許值 ${Math.round(Math.abs(result.closureMm) / result.toleranceMm * 100)}%"><span style="width:${gauge}%"></span></div>` : ''}
-    <div class="result-grid"><div><span>後視合計 BS</span><strong>${formatHeight(result.sumBS)} m</strong></div><div><span>前視合計 FS</span><strong>${formatHeight(result.sumFS)} m</strong></div><div><span>改正數分配</span><strong>${result.adjusted ? '已完成' : result.withinTolerance === true ? '待補資料' : '未執行'}</strong></div></div>`;
+    <div class="result-grid"><div><span>後視合計 BS</span><strong>${formatHeight(result.sumBS)} m</strong></div><div><span>前視合計 FS</span><strong>${formatHeight(result.sumFS)} m</strong></div><div><span>改正數分配</span><strong>${result.adjusted ? '已完成' : result.withinTolerance === true ? '待複核／補資料' : '未執行'}</strong></div></div>`;
+  $('#resultArithmetic').innerHTML = arithmeticSummary(result);
+  $('#resultSightBalance').innerHTML = sightBalanceSummary(result);
   $('#resultTable').innerHTML = resultTable(result);
   $('#summaryTableMeta').innerHTML = summaryMeta(result);
   $('#summaryTableStatus').innerHTML = `<strong>${summaryStatus(result)}</strong><div class="summary-checks">${summaryChecks(result)}</div>`;
@@ -336,6 +397,7 @@ function renderResult() {
     ...result.issues,
     result.adjusted ? `已用「${method}」分配閉合差；中間視高程承接所在測站起點的累計改正。` : '',
     result.withinTolerance === false ? '閉合差超限，不執行自動改正；請核對原始讀數與點位。' : '',
+    result.riseFallCheck.ok === false ? '高差法算術複核不一致，暫停自動改正。' : '',
     '此處為單一測線的簡易閉合差分配，不代表控制網整體平差。',
   ].filter(Boolean).join(' ');
   return result;
@@ -676,16 +738,32 @@ function renderAll() {
   $('#startHeightKind').value = project.route.startHeightKind || 'known';
   $('#endHeight').value = project.route.endHeight || '';
   $('#toleranceMm').value = project.route.toleranceMm || '';
+  $('#toleranceBasis').value = project.route.toleranceBasis || '';
+  $('#formulaC').value = project.route.formulaC || '';
   $('#staffLengthM').value = project.route.staffLengthM ?? '5';
+  $('#stadiaConstantK').value = project.route.stadiaConstantK ?? '100';
+  $('#threeWireToleranceMm').value = project.route.threeWireToleranceMm || '';
   $('#adjustMethod').value = project.route.adjustMethod || 'stations';
+  $('#instrumentSerial').value = project.instrumentCheck.serial || '';
+  $('#calibrationDate').value = project.instrumentCheck.calibrationDate || '';
+  $('#calibrationAgency').value = project.instrumentCheck.calibrationAgency || '';
+  for (const [id, key] of Object.entries({ pegA1: 'a1', pegB1: 'b1', pegA2: 'a2', pegB2: 'b2', pegDistanceM: 'distanceM' })) $(`#${id}`).value = project.instrumentCheck.twoPeg[key] || '';
+  renderTwoPegResult();
   $('#mapSource').value = project.mapSource || '';
   $('#fieldMapSource').value = project.mapSource || '';
   renderPointPlan(); renderPoints(); renderMap(); renderStations(); renderPhotos();
 }
 
+function renderTwoPegResult() {
+  const result = twoPegCheck(project.instrumentCheck?.twoPeg);
+  $('#twoPegResult').textContent = result?.issue || (result
+    ? `視準軸誤差 e＝${formatMm(result.errorMm)} mm；每 100 m 誤差量＝${formatMm(result.per100mMm)} mm。僅列計算值。`
+    : '填齊讀數與兩樁距離後顯示計算值。');
+}
+
 function handleRouteInput(event) {
   const mapping = { caseName: 'name', caseNo: 'number', surveyDate: 'date', observer: 'observer', rodHolder: 'rodHolder', photographer: 'photographer', instrument: 'instrument', datum: 'datum', approxLocation: 'approxLocation', mapSource: 'mapSource', fieldMapSource: 'mapSource' };
-  const routeMapping = { startHeight: 'startHeight', startHeightKind: 'startHeightKind', endHeight: 'endHeight', toleranceMm: 'toleranceMm', staffLengthM: 'staffLengthM', adjustMethod: 'adjustMethod' };
+  const routeMapping = { startHeight: 'startHeight', startHeightKind: 'startHeightKind', endHeight: 'endHeight', toleranceMm: 'toleranceMm', toleranceBasis: 'toleranceBasis', formulaC: 'formulaC', staffLengthM: 'staffLengthM', stadiaConstantK: 'stadiaConstantK', threeWireToleranceMm: 'threeWireToleranceMm', adjustMethod: 'adjustMethod' };
   if (mapping[event.target.id]) project[mapping[event.target.id]] = event.target.value;
   else if (routeMapping[event.target.id]) project.route[routeMapping[event.target.id]] = event.target.value;
   else return false;
@@ -693,7 +771,7 @@ function handleRouteInput(event) {
   if (event.target.id === 'fieldMapSource') $('#mapSource').value = event.target.value;
   if (event.target.id === 'mapSource') $('#fieldMapSource').value = event.target.value;
   if (event.target.id === 'staffLengthM') updateReadingWarnings();
-  renderResult(); queueSave();
+  const result = renderResult(); updateWireFeedback(result); queueSave();
   return true;
 }
 
@@ -701,6 +779,15 @@ function parsePair(pair) { return pair.split(':').map(Number); }
 
 function handleStationInput(event) {
   const target = event.target;
+  if (target.dataset.wireField !== undefined) {
+    project.setups[Number(target.dataset.station)][target.dataset.wireField] = target.value;
+    updateWireFeedback(renderResult()); queueSave(); return true;
+  }
+  if (target.dataset.isWire !== undefined) {
+    const [station, sight, key] = target.dataset.isWire.split(':');
+    project.setups[Number(station)].intermediate[Number(sight)][key] = target.value;
+    updateWireFeedback(renderResult()); queueSave(); return true;
+  }
   if (target.dataset.field !== undefined) {
     const index = Number(target.dataset.station);
     if (target.dataset.field === 'fsPointId' && index + 1 < project.setups.length && project.setups[index + 1].bs !== '' && target.value !== project.setups[index].fsPointId) {
@@ -711,7 +798,7 @@ function handleStationInput(event) {
     project.setups[index][target.dataset.field] = target.value;
     if (target.dataset.reading !== undefined) updateReadingWarning(target);
     if (target.dataset.field === 'fsPointId') renderStations();
-    else { renderResult(); queueSave(); }
+    else { updateWireFeedback(renderResult()); queueSave(); }
     if (target.dataset.field === 'fsPointId') queueSave(true);
     return true;
   }
@@ -719,7 +806,7 @@ function handleStationInput(event) {
     const [station, sight] = parsePair(target.dataset.isPoint ?? target.dataset.isValue);
     project.setups[station].intermediate[sight][target.dataset.isPoint !== undefined ? 'pointId' : 'value'] = target.value;
     if (target.dataset.isValue !== undefined) updateReadingWarning(target);
-    renderResult(); queueSave();
+    updateWireFeedback(renderResult()); queueSave();
     return true;
   }
   return false;
@@ -730,6 +817,10 @@ function bindInputs() {
     if (handleRouteInput(event)) return;
     if (handleStationInput(event)) return;
     const target = event.target;
+    const equipmentFields = { instrumentSerial: 'serial', calibrationDate: 'calibrationDate', calibrationAgency: 'calibrationAgency' };
+    const pegFields = { pegA1: 'a1', pegB1: 'b1', pegA2: 'a2', pegB2: 'b2', pegDistanceM: 'distanceM' };
+    if (equipmentFields[target.id]) { project.instrumentCheck[equipmentFields[target.id]] = target.value; queueSave(); return; }
+    if (pegFields[target.id]) { project.instrumentCheck.twoPeg[pegFields[target.id]] = target.value; renderTwoPegResult(); queueSave(); return; }
     if (target.id === 'plannedSCount' || target.id === 'plannedTPCount') {
       project.pointPlan[target.id === 'plannedSCount' ? 'sCount' : 'tpCount'] = target.value;
       updatePointPlanStatus(); queueSave(); return;
@@ -791,6 +882,18 @@ function bindActions() {
     const target = event.target.closest('button');
     if (!target) return;
     if (target.dataset.tab) { switchTab(target.dataset.tab); return; }
+    if (target.dataset.copyWireDistance !== undefined) {
+      const index = Number(target.dataset.copyWireDistance);
+      const station = calculate(project).stations[index];
+      if (station?.bsDistanceM === null || station?.fsDistanceM === null || !station) return;
+      const current = String(project.setups[index].distance ?? '').trim();
+      const measured = formatHeight(station.bsDistanceM + station.fsDistanceM);
+      if (current && !confirm(`本站原測線長度為 ${current} m；改由三絲視距帶入 ${measured} m？`)) return;
+      project.setups[index].distance = measured;
+      const input = $(`[data-field="distance"][data-station="${index}"]`);
+      if (input) input.value = measured;
+      updateWireFeedback(renderResult()); queueSave(true); return;
+    }
     if (target.dataset.nextUnobserved !== undefined) {
       const observed = observedPointIds();
       const next = project.points.find(item => item.type !== 'BM' && !observed.has(item.id)) || project.points.find(item => item.id === project.route.endId && !observed.has(item.id));
@@ -843,14 +946,15 @@ function bindActions() {
       if (station !== project.setups.length - 1 || sight !== setup.intermediate.length - 1 || setup.fsPointId) return;
       const reading = setup.intermediate.pop();
       setup.fsPointId = reading.pointId; setup.fs = reading.value; setup.fsInverted = !!reading.inverted;
+      setup.fsUpper = reading.upper || ''; setup.fsLower = reading.lower || '';
       renderStations(); queueSave(true); return;
     }
     if (target.dataset.convertFs !== undefined) {
       const index = Number(target.dataset.convertFs);
       if (index !== project.setups.length - 1) return;
       const setup = project.setups[index];
-      setup.intermediate.push({ pointId: setup.fsPointId, value: setup.fs, inverted: !!setup.fsInverted });
-      setup.fsPointId = ''; setup.fs = ''; setup.fsInverted = false;
+      setup.intermediate.push({ pointId: setup.fsPointId, value: setup.fs, inverted: !!setup.fsInverted, upper: setup.fsUpper || '', lower: setup.fsLower || '' });
+      setup.fsPointId = ''; setup.fs = ''; setup.fsInverted = false; setup.fsUpper = ''; setup.fsLower = '';
       renderStations(); queueSave(true); return;
     }
     if (target.dataset.addIs !== undefined) {
@@ -963,6 +1067,24 @@ function bindActions() {
   $('#equipmentGallery').onchange = event => { addImage(event.target.files[0], 'equipment'); event.target.value = ''; };
   $('#exportBackup').onclick = exportBackup;
   $('#exportBackup2').onclick = exportBackup;
+  $('#exportCsv').onclick = () => {
+    const csv = buildSummaryCsv(project);
+    const name = `${(project.number || project.name || '水準測量').replace(/[\\/:*?"<>|]/g, '_')}_水準測量成果總表.csv`;
+    download(name, new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    notify('成果總表 CSV 已下載。');
+  };
+  $('#applyFormula').onclick = () => {
+    const result = formulaToleranceMm(project.route.formulaC, project.setups);
+    const status = $('#formulaStatus');
+    if (result.issue) { status.textContent = result.issue; status.classList.add('danger-text'); return; }
+    const nextValue = formatMm(result.valueMm);
+    if (project.route.toleranceMm && !confirm(`將原容許值 ${project.route.toleranceMm} mm 改為公式計算的 ${nextValue} mm？`)) return;
+    project.route.toleranceMm = nextValue;
+    $('#toleranceMm').value = nextValue;
+    status.classList.remove('danger-text');
+    status.textContent = `測線總長 ${formatHeight(result.lengthKm)} km；已帶入 ${nextValue} mm。`;
+    renderResult(); queueSave(true);
+  };
   $('#exportPhotoTask').onclick = () => exportPhotoWork('task');
   $('#exportPhotoResult').onclick = () => exportPhotoWork('result');
   $('#mergePhotoBackup').onchange = event => { mergePhotoBackup(event.target.files[0]); event.target.value = ''; };
@@ -990,6 +1112,7 @@ function printSummary() {
   report.innerHTML = `<header class="print-title"><h1>水準測量成果總表</h1><p>案件：${safe(project.name || '未填')}　案號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　儀器觀測者：${safe(project.observer || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p><p>測線：${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}　起點${project.route.startHeightKind === 'assumed' ? '假設' : '已知'}高程：${formatHeight(result.startHeight)} m</p></header>
     <p class="summary-print-status"><strong>${summaryStatus(result)}</strong></p>${printTable(result)}
     <div class="summary-print-checks">${summaryChecks(result)}<span>實測終點 <strong>${formatHeight(result.rawEndHeight)} m</strong></span></div>
+    <p>容許值依據：${safe(project.route.toleranceBasis || '未填')}。</p>${arithmeticSummary(result)}${sightBalanceSummary(result)}
     ${result.issues.length ? `<p class="print-alert">待補／檢核事項：${safe(result.issues.join('；'))}</p>` : ''}
     <p class="print-note">原始讀數、暫算高程與改正後高程分列；改正後高程僅在測線完整且閉合差符合人工指定容許值時產生。本表為單一測線簡易閉合差分配，不代表控制網整體平差。</p>
     <footer>來源：水準測量現場紀錄 V${VERSION}｜列印日期：${safe(new Date().toLocaleDateString('zh-TW'))}</footer>`;
@@ -1013,6 +1136,11 @@ async function printReport() {
   const photos = project.photos.filter(photo => observed.has(photo.pointId)).map(photo => `<article class="print-photo"><p><strong>點位 ${safe(code(photo.pointId))}</strong>｜${safe(photo.description || point(photo.pointId)?.description || '未填位置說明')}</p><img src="${safe(photoUrls.get(photo.id) || '')}" alt="${safe(code(photo.pointId))} 照片"><small>攝影者：${safe(photo.photographer || '未記錄')}｜原檔：${safe(photo.name)}｜加入日期：${safe(photo.addedAt.slice(0, 10))}</small></article>`).join('');
   const referenceEquipmentPhoto = project.instrument.toUpperCase().includes(DEFAULT_INSTRUMENT) ? '<article class="print-photo"><p><strong>PENTAX AP-128 水準儀</strong>｜公司設備參考照，非本案測量當日拍攝。</p><img src="./equipment/pentax-ap-128-source.png" alt="PENTAX AP-128 公司設備參考照"><small>來源：使用者提供之原始照片，原圖保留。</small></article>' : '';
   const equipmentPhotos = project.equipmentPhotos.map(photo => `<article class="print-photo"><p><strong>${safe(photo.instrument)} 本案設備照片</strong>｜${safe(photo.description || '未填設備說明')}</p><img src="${safe(equipmentPhotoUrls.get(photo.id) || '')}" alt="${safe(photo.instrument)} 設備照片"><small>原檔：${safe(photo.name)}｜加入日期：${safe(photo.addedAt.slice(0, 10))}</small></article>`).join('');
+  const instrumentCheck = project.instrumentCheck || {};
+  const peg = twoPegCheck(instrumentCheck.twoPeg);
+  const pegInputs = instrumentCheck.twoPeg || {};
+  const calibration = `<p>儀器編號：${safe(instrumentCheck.serial || '未填')}；最近校正日期：${safe(instrumentCheck.calibrationDate || '未填')}；校正單位：${safe(instrumentCheck.calibrationAgency || '未填')}。</p>
+    ${peg ? `<p>兩樁法：a1 ${safe(pegInputs.a1)} m、b1 ${safe(pegInputs.b1)} m、a2 ${safe(pegInputs.a2)} m、b2 ${safe(pegInputs.b2)} m；兩樁距離 D ${safe(pegInputs.distanceM)} m。${peg.issue ? safe(peg.issue) : `視準軸誤差 e ${formatMm(peg.errorMm)} mm；每 100 m 誤差量 ${formatMm(peg.per100mMm)} mm。`}本表僅列計算值。</p>` : ''}`;
   const status = result.withinTolerance === true ? '符合輸入容許值' : result.withinTolerance === false ? '超出容許值，未進行改正' : '尚未完成閉合檢核';
   const report = document.createElement('section');
   report.id = 'printPanel';
@@ -1023,12 +1151,13 @@ async function printReport() {
     ${reportedPoints.length ? `<table class="point-print-table"><thead><tr><th>點號</th><th>類別</th><th>位置說明</th></tr></thead><tbody>${reportedPoints.map(item => `<tr><td>${safe(item.code)}</td><td>${safe(item.type)}</td><td>${safe(item.description || '—')}</td></tr>`).join('')}</tbody></table>` : '<p>尚無已觀測點位。</p>'}
     <h2>二、水準測量成果總表</h2><p><strong>${summaryStatus(result)}</strong></p>${printTable(result)}
     <p>後視合計 ${formatHeight(result.sumBS)} m；前視合計 ${formatHeight(result.sumFS)} m；實測終點高程 ${formatHeight(result.rawEndHeight)} m；閉合差 ${formatMm(result.closureMm)} mm。</p>
-    <p>人工輸入容許值：${result.toleranceMm === null ? '未指定' : `±${formatMm(result.toleranceMm)} mm`}；檢核：${status}。改正方式：${result.adjusted ? result.method === 'distance' ? '按各站測線長度比例' : '按測站數等分' : '未執行'}。</p>
+    <p>人工輸入容許值：${result.toleranceMm === null ? '未指定' : `±${formatMm(result.toleranceMm)} mm`}；依據：${safe(project.route.toleranceBasis || '未填')}；檢核：${status}。改正方式：${result.adjusted ? result.method === 'distance' ? '按各站測線長度比例' : '按測站數等分' : '未執行'}。</p>
+    ${arithmeticSummary(result)}${sightBalanceSummary(result)}
     ${project.routeHistory?.length ? `<p>終點變更紀錄：${project.routeHistory.map(item => `${safe(item.at.slice(0, 19))} ${safe(item.from)} → ${safe(item.to)}，原因：${safe(item.reason)}`).join('；')}</p>` : ''}
     ${result.issues.length ? `<p class="print-alert">待補／檢核事項：${safe(result.issues.join('；'))}</p>` : ''}
     <p class="print-note">原始讀數與暫算高程保留；改正後高程僅在測線完整且閉合差符合輸入容許值時產生。中間視承接所在測站起點累計改正。本表為單一測線簡易閉合差分配，不代表控制網整體平差。</p>
     <h2>三、點位照片</h2>${photos || '<p>未附點位照片。</p>'}
-    <h2>四、設備照片</h2>${referenceEquipmentPhoto}${equipmentPhotos}${referenceEquipmentPhoto || equipmentPhotos ? '' : '<p>未附設備照片。</p>'}
+    <h2>四、儀器檢校與設備照片</h2>${calibration}${referenceEquipmentPhoto}${equipmentPhotos}${referenceEquipmentPhoto || equipmentPhotos ? '' : '<p>未附設備照片。</p>'}
     <footer>列印時間：${safe(new Date().toLocaleString('zh-TW'))}｜來源工具：水準測量現場紀錄 V${VERSION}</footer>`;
   $('#printPanel')?.remove();
   document.body.append(report);

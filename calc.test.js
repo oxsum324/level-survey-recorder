@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculate } from './calc.js';
+import { analyzeThreeWire, buildSummaryCsv, calculate, formulaToleranceMm, twoPegCheck } from './calc.js';
 
 function example(finalFs = '0.883', toleranceMm = '5', adjustMethod = 'stations') {
   const codes = ['BM1', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'TP'];
@@ -167,4 +167,71 @@ test('inverted backsight and unmarked negative readings are distinguished', () =
   result = calculate(project);
   assert.equal(result.stations[0].bs, -0.595);
   assert.equal(result.stations[0].instrumentHeight.toFixed(3), '86.058');
+});
+
+test('three-wire readings provide sight distances and optional midpoint warnings', () => {
+  const project = example();
+  project.route.stadiaConstantK = '100';
+  project.route.threeWireToleranceMm = '2';
+  project.setups[0].bsUpper = '0.645';
+  project.setups[0].bsLower = '0.545';
+  project.setups[0].fsUpper = '1.467';
+  project.setups[0].fsLower = '1.367';
+  project.setups[0].intermediate[0].upper = '0.904';
+  project.setups[0].intermediate[0].lower = '0.800';
+  const result = calculate(project);
+  assert.equal(result.complete, true);
+  assert.equal(result.stations[0].bsDistanceM.toFixed(3), '10.000');
+  assert.equal(result.stations[0].fsDistanceM.toFixed(3), '10.000');
+  assert.equal(result.stations[0].distanceDifferenceM.toFixed(3), '0.000');
+  assert.equal(result.threeWireAlerts.length, 1);
+  assert.match(result.threeWireAlerts[0], /中間視 S1/);
+  assert.equal(result.stations[0].intermediate[0].wire.exceedsTolerance, true);
+  assert.equal(analyzeThreeWire(1.5, '', '', 5, 100, null), null);
+  assert.equal(analyzeThreeWire(1.5, '1.6', '', 5, 100, null).issue.includes('同時'), true);
+  assert.equal(analyzeThreeWire(1.5, '1.4', '1.6', 5, 100, null).distanceM, undefined);
+});
+
+test('rise and fall independently reproduces the provided BM1 loop and inverted sight', () => {
+  const loop = calculate(example());
+  assert.equal(loop.riseFallCheck.ok, true);
+  assert.ok(Math.abs(loop.riseFallCheck.sumRise - loop.riseFallCheck.sumFall) < 1e-9);
+  assert.ok(loop.riseFallCheck.maxDiffMm < 1e-7);
+  const project = example();
+  project.setups[0].intermediate[0].inverted = true;
+  const inverted = calculate(project);
+  assert.equal(inverted.riseFallCheck.ok, true);
+  assert.ok(inverted.riseFallCheck.maxDiffMm < 1e-7);
+  project.setups[0].fs = '';
+  assert.equal(calculate(project).riseFallCheck.ok, null);
+});
+
+test('C square-root length uses every manually entered station distance', () => {
+  const setups = example().setups;
+  assert.deepEqual(formulaToleranceMm('5', setups), { lengthKm: 0.1, valueMm: 1.58 });
+  setups[1].distance = '';
+  assert.match(formulaToleranceMm('5', setups).issue, /每站/);
+  assert.match(formulaToleranceMm('', example().setups).issue, /C 值/);
+});
+
+test('CSV preserves reading order, correction blanks, BOM, and spreadsheet-safe text', () => {
+  const project = example('0.880', '');
+  project.name = '=SUM(1,1)';
+  project.number = 'A,1';
+  project.setups[0].intermediate[0].inverted = true;
+  const csv = buildSummaryCsv(project);
+  assert.equal(csv.charCodeAt(0), 0xfeff);
+  assert.match(csv, /案件名稱,"'=SUM\(1,1\)"/);
+  assert.match(csv, /案件編號,"A,1"/);
+  assert.match(csv, /測站,點號,點位類別,後視,中間視,前視,倒尺註記,視準軸高,原始高程,改正數,改正後高程,測線長度,備註/);
+  assert.match(csv, /1,S1,S,,0\.848,,IS 倒尺,87\.248,88\.096,,,,中間視/);
+  assert.match(csv, /是否已改正,否/);
+});
+
+test('two-peg check reports signed error without a pass or fail judgment', () => {
+  const result = twoPegCheck({ a1: '1.000', b1: '1.200', a2: '1.100', b2: '1.310', distanceM: '50' });
+  assert.equal(result.errorMm.toFixed(2), '-10.00');
+  assert.equal(result.per100mMm.toFixed(2), '-20.00');
+  assert.equal(twoPegCheck({ a1: '1.000' }), null);
+  assert.match(twoPegCheck({ a1: '1', b1: '2', a2: '3', b2: '4', distanceM: '0' }).issue, /大於零/);
 });

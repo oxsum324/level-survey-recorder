@@ -1469,15 +1469,121 @@ function bindActions() {
     await replaceProject(project, []);
     revokePhotos(); renderAll(); switchTab('route'); notify('已建立新案件。');
   };
-  $('#printReport').onclick = printReport;
-  $('#printSummary').onclick = printSummary;
+  $('#printReport').onclick = () => preparePreview('report');
+  $('#printSummary').onclick = () => preparePreview('summary');
+  $('#closePreview').onclick = closePreview;
+  $('#togglePreviewZoom').onclick = () => { previewZoomed = !previewZoomed; fitPreview(); };
+  $('#printPreview').onclick = printPreparedReport;
+  $('#downloadPdf').onclick = () => { if (preparedPdf) download(preparedPdfName, preparedPdf); };
+  $('#sharePdf').onclick = () => { if (preparedPdf) deliverFile(preparedPdfName, preparedPdf, true); };
+  window.addEventListener('resize', fitPreview);
+}
+
+let preparedPdf = null;
+let preparedPdfName = '';
+let previewBuildId = 0;
+let resultScrollY = 0;
+let previewZoomed = false;
+
+function fitPreview() {
+  if ($('#previewPanel').hidden) return;
+  $('#previewSheet').style.zoom = previewZoomed ? '1' : String(Math.min(1, (window.innerWidth - 16) / 794));
+  $('#togglePreviewZoom').textContent = previewZoomed ? '縮小全頁' : '放大檢視';
+}
+
+async function preparePreview(kind) {
+  const button = kind === 'summary' ? $('#printSummary') : $('#printReport');
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = '準備預覽中…';
+  try {
+    if (kind === 'summary') await buildSummaryPreview();
+    else await buildReportPreview();
+  } catch (error) { notify(`預覽無法建立：${error.message}`, true); }
+  finally { button.disabled = false; button.textContent = label; }
+}
+
+function showPreview(report, suffix) {
+  const buildId = ++previewBuildId;
+  preparedPdf = null;
+  previewZoomed = false;
+  preparedPdfName = `${(project.number || project.name || '水準測量').replace(/[\\/:*?"<>|]/g, '_')}_${suffix}.pdf`;
+  const existing = $('#printPanel');
+  if (existing && existing !== report) existing.remove();
+  $('#previewSheet').append(report);
+  resultScrollY = window.scrollY;
+  $('#previewTitle').textContent = suffix;
+  $('#previewPanel').hidden = false;
+  document.body.classList.add('preview-mode');
+  $('#pdfStatus').textContent = '正在建立可下載 PDF…';
+  $('#downloadPdf').disabled = true;
+  $('#sharePdf').hidden = !canShareFile();
+  $('#sharePdf').disabled = true;
+  $('#printPreview').disabled = true;
+  window.scrollTo(0, 0);
+  preparePdf(report, buildId);
+}
+
+async function preparePdf(report, buildId) {
+  try {
+    if (typeof window.html2pdf !== 'function') throw new Error('PDF 轉檔元件未載入');
+    await document.fonts?.ready;
+    const loadedCss = [...document.styleSheets].map(sheet => {
+      try { return [...sheet.cssRules].map(rule => rule.cssText).join('\n'); }
+      catch (_) { return ''; }
+    }).join('\n');
+    const blob = await window.html2pdf().set({
+      margin: 15,
+      image: { type: 'jpeg', quality: 0.96 },
+      html2canvas: { scale: 2, useCORS: false, scrollY: 0, logging: false, onclone: cloned => {
+        const style = cloned.createElement('style');
+        style.textContent = loadedCss;
+        cloned.head.append(style);
+      } },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'] },
+    }).from(report).outputPdf('blob');
+    if (buildId !== previewBuildId) return;
+    if (!(blob instanceof Blob) || blob.size < 1000) throw new Error('產出的檔案內容不完整');
+    for (let index = 0; index < 10 && document.querySelectorAll('#printPanel').length > 1; index++) await new Promise(resolve => setTimeout(resolve, 50));
+    preparedPdf = blob;
+    $('#pdfStatus').textContent = 'PDF 已備妥，可直接下載或使用系統列印。';
+    $('#downloadPdf').disabled = false;
+    $('#sharePdf').disabled = false;
+  } catch (error) {
+    if (buildId !== previewBuildId) return;
+    $('#pdfStatus').textContent = `直接下載 PDF 失敗：${error.message}。仍可試用系統列印。`;
+  } finally {
+    if (buildId === previewBuildId) { fitPreview(); $('#printPreview').disabled = false; }
+  }
+}
+
+function closePreview() {
+  ++previewBuildId;
+  preparedPdf = null;
+  $('#previewPanel').hidden = true;
+  document.body.classList.remove('preview-mode');
+  $('#previewSheet').style.zoom = '';
+  $('#printPanel')?.remove();
+  window.scrollTo(0, resultScrollY);
+}
+
+function printPreparedReport() {
+  if (!$('#printPanel')) return;
+  const previousTitle = document.title;
+  document.title = preparedPdfName.replace(/\.pdf$/i, '');
+  const restore = () => { document.title = previousTitle; window.removeEventListener('afterprint', restore); };
+  window.addEventListener('afterprint', restore, { once: true });
+  try { window.print(); }
+  catch (error) { restore(); $('#pdfStatus').textContent = `系統列印無法開啟：${error.message}。請使用下載 PDF。`; }
+  setTimeout(restore, 3000);
 }
 
 function printTable(result) {
   return `<table><thead><tr><th>站</th><th>點號</th><th>後視 BS<br>m</th><th>前視 FS<br>m</th><th>中間視 IS<br>m</th><th>觀測時間</th><th>暫算高程<br>m</th><th>改正後高程<br>m</th><th>備註</th></tr></thead><tbody>${resultRows(result)}</tbody></table>`;
 }
 
-async function printSummary() {
+async function buildSummaryPreview() {
   const result = calculate(project);
   let hash;
   try { hash = await caseFingerprint(); } catch (error) { notify(`資料指紋計算失敗：${error.message}`, true); return; }
@@ -1491,16 +1597,10 @@ async function printSummary() {
     ${result.issues.length ? `<p class="print-alert">待補／檢核事項：${safe(result.issues.join('；'))}</p>` : ''}
     <p class="print-note">原始讀數、暫算高程與改正後高程分列；改正後高程僅在測線完整且閉合差符合人工指定容許值時產生。本表為單一測線簡易閉合差分配，不代表控制網整體平差。</p>
     <footer>資料指紋 SHA-256：${hash.slice(0, 16)}…｜來源：水準測量現場紀錄 V${VERSION}｜列印日期：${safe(new Date().toLocaleDateString('zh-TW'))}</footer>`;
-  $('#printPanel')?.remove();
-  document.body.append(report);
-  const previousTitle = document.title;
-  document.title = `${project.number || project.name || '水準測量'}_水準測量成果總表`;
-  const cleanup = () => { document.title = previousTitle; window.removeEventListener('afterprint', cleanup); };
-  window.addEventListener('afterprint', cleanup);
-  window.print();
+  showPreview(report, '水準測量成果總表');
 }
 
-async function printReport() {
+async function buildReportPreview() {
   const result = calculate(project);
   let hash;
   try { hash = await caseFingerprint(); } catch (error) { notify(`資料指紋計算失敗：${error.message}`, true); return; }
@@ -1539,7 +1639,7 @@ async function printReport() {
     <h2>六、讀數更正與操作紀錄</h2>${project.auditLog.length ? `<table><thead><tr><th>時間</th><th>測站／點位</th><th>欄位</th><th>原值</th><th>新值</th><th>原因</th></tr></thead><tbody>${project.auditLog.map(item => `<tr><td>${safe(dateTime(item.at))}</td><td>第 ${safe(item.station)} 站／${safe(item.pointCode)}</td><td>${safe(item.field)}</td><td><del>${safe(item.from)}</del></td><td>${safe(item.to)}</td><td>${safe(item.reason)}</td></tr>`).join('')}</tbody></table>` : '<p>無更正紀錄。</p>'}
     <footer>列印時間：${safe(new Date().toLocaleString('zh-TW'))}｜來源工具：水準測量現場紀錄 V${VERSION}｜資料指紋 SHA-256：${hash.slice(0, 16)}…<br>完整指紋：${hash}</footer>`;
   $('#printPanel')?.remove();
-  document.body.append(report);
+  $('#previewSheet').append(report);
   const reportImages = [...report.querySelectorAll('img')];
   await Promise.all(reportImages.map(img => img.decode().catch(() => {})));
   if (reportImages.some(img => !img.naturalWidth)) {
@@ -1547,11 +1647,7 @@ async function printReport() {
     notify('圖面或照片未能載入，請核對案件媒體後再列印。', true);
     return;
   }
-  const previousTitle = document.title;
-  document.title = `${project.number || project.name || '水準測量'}_水準測量成果`;
-  const cleanup = () => { document.title = previousTitle; window.removeEventListener('afterprint', cleanup); };
-  window.addEventListener('afterprint', cleanup);
-  window.print();
+  showPreview(report, '水準測量成果');
 }
 
 async function main() {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeThreeWire, buildSummaryCsv, calculate, formulaToleranceMm, twoPegCheck } from './calc.js';
+import { analyzeThreeWire, buildSummaryCsv, calculate, formulaToleranceMm, readingIssue, suggestMmCorrection, twoPegCheck } from './calc.js';
 
 function example(finalFs = '0.883', toleranceMm = '5', adjustMethod = 'stations') {
   const codes = ['BM1', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'TP'];
@@ -161,7 +161,7 @@ test('inverted backsight and unmarked negative readings are distinguished', () =
   project.setups[0].bs = '-0.595';
   let result = calculate(project);
   assert.equal(result.closureMm, null);
-  assert.match(result.issues.join(' '), /讀數為負值，如為倒尺請勾選「倒尺」/);
+  assert.match(result.issues.join(' '), /第 1 站 BM1 點（後視）讀數為負值，如為倒尺請勾選「倒尺」/);
   project.setups[0].bs = '0.595';
   project.setups[0].bsInverted = true;
   result = calculate(project);
@@ -190,6 +190,23 @@ test('three-wire readings provide sight distances and optional midpoint warnings
   assert.equal(analyzeThreeWire(1.5, '', '', 5, 100, null), null);
   assert.equal(analyzeThreeWire(1.5, '1.6', '', 5, 100, null).issue.includes('同時'), true);
   assert.equal(analyzeThreeWire(1.5, '1.4', '1.6', 5, 100, null).distanceM, undefined);
+});
+
+test('inverted three-wire readings reverse the expected order but retain positive distance', () => {
+  const normal = analyzeThreeWire(1.5, '1.6', '1.4', 5, 100, null);
+  const inverted = analyzeThreeWire(-1.5, '1.4', '1.6', 5, 100, null, true);
+  assert.equal(normal.distanceM.toFixed(3), '20.000');
+  assert.equal(inverted.distanceM.toFixed(3), '20.000');
+  assert.equal(inverted.middleDiffMm, 0);
+  assert.match(analyzeThreeWire(-1.5, '1.6', '1.4', 5, 100, null, true).issue, /倒尺/);
+  assert.match(analyzeThreeWire(1.5, '1.4', '1.6', 5, 100, null).issue, /正立尺/);
+});
+
+test('millimeter typo correction remains a deliberate field action', () => {
+  assert.equal(suggestMmCorrection('1417', 5), '1.417');
+  assert.equal(suggestMmCorrection('8000', 5), null);
+  assert.equal(suggestMmCorrection('1.417', 5), null);
+  assert.match(readingIssue('-1.2', 5, 3, '前視', 'S4'), /第 3 站 S4 點（前視）/);
 });
 
 test('rise and fall independently reproduces the provided BM1 loop and inverted sight', () => {
@@ -223,8 +240,8 @@ test('CSV preserves reading order, correction blanks, BOM, and spreadsheet-safe 
   assert.equal(csv.charCodeAt(0), 0xfeff);
   assert.match(csv, /案件名稱,"'=SUM\(1,1\)"/);
   assert.match(csv, /案件編號,"A,1"/);
-  assert.match(csv, /測站,點號,點位類別,後視,中間視,前視,倒尺註記,視準軸高,原始高程,改正數,改正後高程,測線長度,備註/);
-  assert.match(csv, /1,S1,S,,0\.848,,IS 倒尺,87\.248,88\.096,,,,中間視/);
+  assert.match(csv, /測站,點號,點位類別,後視（m）,中間視（m）,前視（m）,倒尺註記,視準軸高（m）,原始高程（m）,改正數（mm）,改正後高程（m）,測線長度（m）,觀測時間,備註/);
+  assert.match(csv, /1,S1,S,,0\.848,,IS 倒尺,87\.248,88\.096,,,,,中間視/);
   assert.match(csv, /是否已改正,否/);
 });
 

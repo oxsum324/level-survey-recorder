@@ -1,4 +1,4 @@
-export const VERSION = '0.4.3';
+export const VERSION = '0.4.4';
 
 function numberOf(value) {
   const text = String(value ?? '').trim().replace(',', '.');
@@ -7,9 +7,17 @@ function numberOf(value) {
   return Number.isFinite(valueNumber) ? valueNumber : null;
 }
 
-function reading(value) {
+export function readingIssue(value, length, station, role, pointCode) {
   const n = numberOf(value);
-  return n !== null && n >= 0 ? n : null;
+  if (n === null) return null;
+  if (Math.abs(n) > length) return `第 ${station} 站 ${role} ${pointCode} 點讀數 ${n} m 超過尺長 ${length} m，請確認是否誤以 mm 輸入。`;
+  if (n < 0) return '讀數為負值，如為倒尺請勾選「倒尺」。';
+  return null;
+}
+
+function reading(value, inverted = false) {
+  const n = numberOf(value);
+  return n === null || n < 0 ? null : inverted ? -n : n;
 }
 
 export function calculate(project) {
@@ -20,6 +28,7 @@ export function calculate(project) {
   const endHeight = route.startId === route.endId ? startHeight : numberOf(route.endHeight);
   const compatibleDatum = route.startId === route.endId || route.startHeightKind !== 'assumed';
   const toleranceMm = numberOf(route.toleranceMm);
+  const staffLengthM = route.staffLengthM === undefined ? 5 : numberOf(route.staffLengthM);
   const setups = project.setups || [];
   const stations = [];
   let anchor = route.startId;
@@ -32,6 +41,7 @@ export function calculate(project) {
   if (route.startId !== route.endId && endHeight === null) issues.push('不同終點須輸入終點的已知高程，才能檢核閉合差。');
   if (!compatibleDatum) issues.push('起點仍標為假設高程；與另一已知 BM 閉合前，須確認兩端高程基準相同並改為已知高程。');
   if (toleranceMm !== null && toleranceMm < 0) issues.push('容許閉合差須為零或正值。');
+  if (staffLengthM === null || staffLengthM <= 0) issues.push('水準尺長度須為大於零的數值。');
 
   for (let i = 0; i < setups.length; i++) {
     const setup = setups[i];
@@ -40,7 +50,10 @@ export function calculate(project) {
       issues.push(`${label}後視點須為${i === 0 ? '起點' : '上一站前視點'}。`);
       break;
     }
-    const bs = reading(setup.bs);
+    if (staffLengthM === null || staffLengthM <= 0) break;
+    const bsIssue = readingIssue(setup.bs, staffLengthM, i + 1, '後視', points.get(anchor)?.code || '未指定');
+    if (bsIssue) { issues.push(bsIssue); break; }
+    const bs = reading(setup.bs, setup.bsInverted);
     if (bs === null) {
       issues.push(`${label}的後視讀數尚未填寫。`);
       break;
@@ -50,20 +63,24 @@ export function calculate(project) {
     const intermediate = [];
     let invalidIntermediate = false;
     for (const sight of setup.intermediate || []) {
-      const value = reading(sight.value);
+      const sightIssue = readingIssue(sight.value, staffLengthM, i + 1, '中間視', points.get(sight.pointId)?.code || '未指定');
+      if (sightIssue) { issues.push(sightIssue); invalidIntermediate = true; break; }
+      const value = reading(sight.value, sight.inverted);
       if (!points.has(sight.pointId) || value === null) {
         issues.push(`${label}有未填齊的中間視。`);
         invalidIntermediate = true;
         break;
       }
-      intermediate.push({ pointId: sight.pointId, value, rawHeight: instrumentHeight - value });
+      intermediate.push({ pointId: sight.pointId, value, inverted: !!sight.inverted, rawHeight: instrumentHeight - value });
     }
     if (invalidIntermediate) break;
     const distance = numberOf(setup.distance);
-    const fs = reading(setup.fs);
+    const fsIssue = readingIssue(setup.fs, staffLengthM, i + 1, '前視', points.get(setup.fsPointId)?.code || '未指定');
+    if (fsIssue) { issues.push(fsIssue); break; }
+    const fs = reading(setup.fs, setup.fsInverted);
     const stationComplete = fs !== null && points.has(setup.fsPointId);
     stations.push({
-      index: i + 1, bsPointId: anchor, bs, fsPointId: setup.fsPointId, fs,
+      index: i + 1, bsPointId: anchor, bs, bsInverted: !!setup.bsInverted, fsPointId: setup.fsPointId, fs, fsInverted: !!setup.fsInverted,
       instrumentHeight, intermediate, rawStartHeight: height,
       rawEndHeight: stationComplete ? instrumentHeight - fs : null, distance,
       complete: stationComplete,

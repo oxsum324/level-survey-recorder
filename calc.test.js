@@ -117,3 +117,54 @@ test('each S point may carry the previous foresight and next backsight', () => {
   assert.equal(result.stations[1].bsPointId, result.stations[0].fsPointId);
   assert.equal(result.stations[2].bsPointId, result.stations[1].fsPointId);
 });
+
+test('readings longer than the staff stop closure and use the case staff length', () => {
+  const mistaken = example();
+  mistaken.setups[0].bs = '1417';
+  const rejected = calculate(mistaken);
+  assert.equal(rejected.complete, false);
+  assert.equal(rejected.closureMm, null);
+  assert.match(rejected.issues.join(' '), /第 1 站 後視 BM1 點讀數 1417 m 超過尺長 5 m/);
+  mistaken.setups[0].bs = '-1417';
+  assert.match(calculate(mistaken).issues.join(' '), /讀數 -1417 m 超過尺長 5 m/);
+
+  mistaken.setups[0].bs = '4.999';
+  assert.equal(calculate(mistaken).complete, true);
+  mistaken.route.staffLengthM = '3';
+  mistaken.setups[0].bs = '3.2';
+  assert.match(calculate(mistaken).issues.join(' '), /超過尺長 3 m/);
+  mistaken.setups[0].bs = '1';
+  mistaken.setups[0].intermediate[0].value = '3.2';
+  assert.match(calculate(mistaken).issues.join(' '), /中間視 S1/);
+  mistaken.setups[0].intermediate[0].value = '1';
+  mistaken.setups[0].fs = '3.2';
+  assert.match(calculate(mistaken).issues.join(' '), /前視 S4/);
+});
+
+test('inverted foresight adds its magnitude to the instrument height', () => {
+  // BM1 10.000 + BS 1.000 = HI 11.000; inverted FS 0.500 means 11.000 - (-0.500) = 11.500.
+  const project = {
+    points: [{ id: 'BM1', code: 'BM1' }, { id: 'BM2', code: 'BM2' }],
+    route: { startId: 'BM1', endId: 'BM2', startHeight: '10.000', endHeight: '11.500', startHeightKind: 'known', toleranceMm: '5' },
+    setups: [{ bsPointId: 'BM1', bs: '1.000', intermediate: [], fsPointId: 'BM2', fs: '0.500', fsInverted: true }],
+  };
+  const result = calculate(project);
+  assert.equal(result.stations[0].fs, -0.5);
+  assert.equal(result.rawEndHeight, 11.5);
+  assert.equal(result.closureMm, 0);
+  project.setups[0].intermediate.push({ pointId: 'BM2', value: '0.300', inverted: true });
+  assert.equal(calculate(project).stations[0].intermediate[0].rawHeight, 11.3);
+});
+
+test('inverted backsight and unmarked negative readings are distinguished', () => {
+  const project = example();
+  project.setups[0].bs = '-0.595';
+  let result = calculate(project);
+  assert.equal(result.closureMm, null);
+  assert.match(result.issues.join(' '), /讀數為負值，如為倒尺請勾選「倒尺」/);
+  project.setups[0].bs = '0.595';
+  project.setups[0].bsInverted = true;
+  result = calculate(project);
+  assert.equal(result.stations[0].bs, -0.595);
+  assert.equal(result.stations[0].instrumentHeight.toFixed(3), '86.058');
+});

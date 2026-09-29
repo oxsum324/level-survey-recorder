@@ -5,13 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#164348">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <title>水準測量現場紀錄 V0.4.3</title>
+  <title>水準測量現場紀錄 V0.4.4</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-180.png">
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.4.3</span></h1></div><span id="saveState" role="status">載入中</span></header>
+  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.4.4</span></h1></div><span id="saveState" role="status">載入中</span></header>
   <nav class="tabs" aria-label="工作項目"><button data-tab="route" class="active">① 案件與位置</button><button data-tab="measure">② 觀測讀數</button><button data-tab="photos">③ 點位攝影</button><button data-tab="result">④ 計算與成果</button></nav>
   <main>
     <section id="routePanel" class="tab-panel">
@@ -32,6 +34,7 @@
         <label>預定終點<select id="endId"></select></label>
         <label id="endHeightLabel">終點已知高程（m）<input id="endHeight" type="text" inputmode="decimal" autocomplete="off" placeholder="另一已知 BM 的高程"></label>
         <label>容許閉合差（±mm，人工指定）<input id="toleranceMm" type="text" inputmode="decimal" autocomplete="off" placeholder="例如 5"></label>
+        <label>水準尺長度（m）<input id="staffLengthM" type="text" inputmode="decimal" autocomplete="off" value="5"></label>
         <label>改正數分配<select id="adjustMethod"><option value="stations">按測站數等分</option><option value="distance">按各站測線長度比例</option></select></label>
       </div>
       <p class="note">新案件預填 BM1＝10.000 m（假設高程），可隨時改為實際值。異 BM 閉合須確認兩端使用相同高程基準。容許值及分配方式由案件指定。</p>
@@ -40,6 +43,7 @@
       <div class="card"><h3>尋找作業範圍</h3><label>約略地址／路名<input id="approxLocation" maxlength="160" placeholder="例如 高雄市○○路與○○街口"></label><div class="toolbar location-toolbar"><a id="openGoogleMaps" class="file-button" href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer">在 Google 地圖搜尋並選範圍</a><button id="pasteMap" type="button">貼入剪貼簿圖片</button><label class="file-button">匯入位置圖<input id="mapFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div><p class="note">在 Google 地圖選好範圍後，擷取畫面並回到本頁按 Ctrl+V，或按「貼入剪貼簿圖片」。手機可用「匯入位置圖」選擇截圖。請保留地圖原有來源標示，並填寫底圖來源及截圖日期。</p></div>
       <div class="card"><div class="toolbar"><button id="addBM" type="button">＋ BM</button><button id="addS" type="button">＋ S</button><button id="addTP" type="button">＋ TP</button></div><p id="mapHint" class="note">新增點位並選擇「放到圖上」，再點圖面位置。底圖僅供位置示意，不以圖上距離計算測線長度。</p><div id="mapHome"><div id="mapFrame" class="map-frame" tabindex="0" aria-label="案件位置圖與點位標記"><div id="mapEmpty">尚未匯入位置圖</div><img id="mapImage" alt="案件位置圖" hidden><div id="mapMarkers"></div></div></div><label>底圖來源／截圖日期<input id="mapSource" maxlength="240" placeholder="例如 Google Maps，截圖日期 2026-09-25；保留原圖標示"></label><div id="pointList" class="point-list"></div></div>
       <div class="toolbar bottom"><button id="exportBackup" type="button">匯出完整案件檔</button><label class="file-button">開啟案件檔<input id="importBackup" type="file" accept=".json,application/json" hidden></label><button id="newCase" type="button" class="danger">建立新案件</button></div>
+      <p id="storageState" class="storage-state" role="status">本機儲存：檢查中</p><p id="iosHomeHint" class="note" hidden>可用 Safari 分享 → 加入主畫面。離開現場前仍請匯出案件檔。</p>
     </section>
     <section id="measurePanel" class="tab-panel" hidden>
       <div class="section-head measure-head"><h2>現場讀數</h2><p id="routeSummary"></p><details class="measure-help"><summary>操作說明</summary><p>依實際讀法選中間視、換站前視或終點前視。換站後在同一點讀後視。標圖與拍照可到「點位攝影」由現場人員補做；完整計算在「計算與成果」。</p></details></div>
@@ -65,6 +69,7 @@
     </section>
   </main>
   <dialog id="fieldMapDialog" class="field-map-dialog" aria-labelledby="fieldMapTitle"><div class="dialog-head"><h2 id="fieldMapTitle">點位標註</h2><button id="closeFieldMap" type="button">關閉</button></div><p id="fieldMapMessage" class="note"></p><div class="toolbar"><a id="fieldGoogleMaps" class="file-button" href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer">開啟 Google 地圖</a><label class="file-button">匯入位置圖<input id="fieldMapFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div><label>底圖來源／截圖日期<input id="fieldMapSource" maxlength="240" placeholder="例如 Google Maps，截圖日期 2026-09-27"></label><div id="fieldMapHolder"></div><p class="note">點圖面即可放置標記；暫不標註也可關閉，稍後再補。</p></dialog>
+  <dialog id="replaceDialog" class="replace-dialog" aria-labelledby="replaceTitle"><h2 id="replaceTitle">取代目前案件</h2><p>目前案件已有資料。請選擇取代前的處理方式。</p><div class="replace-actions"><button type="button" data-replace="export" class="primary">先匯出完整案件檔再繼續</button><button type="button" data-replace="replace" class="danger">不匯出，直接取代</button><button type="button" data-replace="cancel">取消</button></div></dialog>
   <div id="message" role="alert" hidden></div>
 </body>
 </html>

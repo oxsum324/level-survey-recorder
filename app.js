@@ -1,4 +1,4 @@
-import { calculate, formatHeight, formatMm, VERSION } from './calc.js';
+import { calculate, formatHeight, formatMm, readingIssue, VERSION } from './calc.js';
 import { loadProject, saveProject, saveMedia, loadMedia, deleteMedia, replaceProject, makeBackup, parseBackup } from './store.js';
 
 const $ = selector => document.querySelector(selector);
@@ -18,13 +18,15 @@ let placingPointId = null;
 let draftNextPointId = '';
 let draftNextRole = 'IS';
 let draftNextValue = '';
+let draftNextInverted = false;
+let persistRequested = false;
 
 function blankProject() {
   const bm = { id: uid(), code: 'BM1', type: 'BM', description: '', position: null };
   return {
     schema: 1, appVersion: VERSION, id: uid(), name: '', number: '', date: new Date().toISOString().slice(0, 10),
     observer: '', rodHolder: '', photographer: '', instrument: DEFAULT_INSTRUMENT, instrumentDefaultApplied: true, datum: '', approxLocation: '', points: [bm], pointPlan: { sCount: '0', tpCount: '0' }, mapMediaId: null, mapSource: '', photos: [], equipmentPhotos: [],
-    route: { startId: bm.id, endId: bm.id, startHeight: '10.000', startHeightKind: 'assumed', endHeight: '', toleranceMm: '', adjustMethod: 'stations' },
+    route: { startId: bm.id, endId: bm.id, startHeight: '10.000', startHeightKind: 'assumed', endHeight: '', toleranceMm: '', staffLengthM: '5', adjustMethod: 'stations' },
     setups: [], routeHistory: [], updatedAt: new Date().toISOString(),
   };
 }
@@ -38,6 +40,7 @@ function normalizeProject() {
     changed = true;
   }
   if (!project.route.startHeightKind) { project.route.startHeightKind = 'known'; changed = true; }
+  if (project.route.staffLengthM === undefined) { project.route.staffLengthM = '5'; changed = true; }
   if (project.rodHolder === undefined) { project.rodHolder = ''; changed = true; }
   if (project.photographer === undefined) { project.photographer = ''; changed = true; }
   if (!project.pointPlan) { project.pointPlan = { sCount: String(project.points.filter(item => item.type === 'S').length), tpCount: String(project.points.filter(item => item.type === 'TP').length) }; changed = true; }
@@ -71,11 +74,28 @@ function queueSave(immediate = false) {
     const snapshot = structuredClone(project);
     saveQueue = saveQueue.then(() => saveProject(snapshot)).then(() => {
       $('#saveState').textContent = '已儲存於此裝置';
+      if (!persistRequested) requestPersistentStorage();
     }).catch(error => {
       $('#saveState').textContent = '儲存失敗';
       notify(`儲存失敗：${error.message}`, true);
     });
   }, immediate ? 0 : 300);
+}
+
+async function updateStorageStatus() {
+  let protectedStorage = false;
+  try { protectedStorage = await navigator.storage?.persisted?.() || false; } catch (_) {}
+  $('#storageState').textContent = protectedStorage
+    ? '本機儲存：已受保護'
+    : '本機儲存：可能被瀏覽器清除，請定期匯出案件檔';
+  const iosSafari = /iPhone|iPad|iPod/.test(navigator.userAgent) && /Safari/.test(navigator.userAgent);
+  $('#iosHomeHint').hidden = !iosSafari || !!navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+}
+
+async function requestPersistentStorage() {
+  persistRequested = true;
+  try { await navigator.storage?.persist?.(); } catch (_) {}
+  await updateStorageStatus();
 }
 
 function options(items, selected, placeholder = '請選擇點位') {
@@ -174,6 +194,25 @@ function synchronizeSetups() {
   });
 }
 
+function updateReadingWarning(input) {
+  const station = Number(input.closest('[data-station]')?.dataset.station ?? project.setups.length - 1);
+  const setup = project.setups[station];
+  const sight = input.dataset.isValue !== undefined ? setup?.intermediate[parsePair(input.dataset.isValue)[1]] : null;
+  const role = sight ? '中間視' : input.id === 'nextReading' ? ($('#nextRole').value === 'IS' ? '中間視' : '前視') : input.dataset.field === 'bs' ? '後視' : '前視';
+  const pointId = sight?.pointId || (input.id === 'nextReading' ? $('#nextPoint').value : input.dataset.field === 'bs' ? setup?.bsPointId : setup?.fsPointId);
+  const length = Number(String(project.route.staffLengthM ?? '5').replace(',', '.'));
+  const issue = Number.isFinite(length) && length > 0 ? readingIssue(input.value, length, station + 1, role, code(pointId)) : null;
+  const warning = input.closest('.reading-value')?.querySelector('.reading-warning');
+  input.classList.toggle('reading-invalid', !!issue);
+  input.setAttribute('aria-invalid', String(!!issue));
+  if (warning) { warning.textContent = issue || ''; warning.hidden = !issue; }
+  return issue;
+}
+
+function updateReadingWarnings() {
+  document.querySelectorAll('[data-reading]').forEach(updateReadingWarning);
+}
+
 function renderStations() {
   synchronizeSetups();
   const card = (setup, index) => {
@@ -181,17 +220,17 @@ function renderStations() {
     const waitingForNext = active && !setup.fsPointId && setup.fs === '';
     const recorded = (setup.intermediate || []).map((sight, sightIndex) => `<div class="reading-row"><span class="reading-role">中間視 IS</span>
       <label>點位<select data-is-point="${index}:${sightIndex}">${options(project.points, sight.pointId)}</select></label>
-      <label>讀數（m）<input ${decimals} data-is-value="${index}:${sightIndex}" value="${safe(sight.value)}" placeholder="0.000"></label>
+      <div class="reading-value"><label>讀數（m）<input ${decimals} data-reading data-is-value="${index}:${sightIndex}" value="${safe(sight.value)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-is-inverted="${index}:${sightIndex}" ${sight.inverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div>
       <div class="reading-actions"><button type="button" data-field-map="${safe(sight.pointId)}">標圖</button>${active && sightIndex === setup.intermediate.length - 1 && !setup.fsPointId ? `<button type="button" data-convert-is="${index}:${sightIndex}">改為前視</button>` : ''}<button type="button" data-remove-is="${index}:${sightIndex}" class="quiet danger-text">移除</button></div></div>`).join('') +
     (setup.fsPointId || setup.fs !== '' ? `<div class="reading-row turn-row"><span class="reading-role">前視 FS</span>
       <label>點位<select data-field="fsPointId" data-station="${index}">${options(project.points, setup.fsPointId)}</select></label>
-      <label>讀數（m）<input ${decimals} data-field="fs" data-station="${index}" value="${safe(setup.fs)}" placeholder="0.000"></label>
+      <div class="reading-value"><label>讀數（m）<input ${decimals} data-reading data-field="fs" data-station="${index}" value="${safe(setup.fs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="fsInverted" data-station="${index}" ${setup.fsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div>
       <div class="reading-actions"><button type="button" data-field-map="${safe(setup.fsPointId)}">標圖</button>${active ? `<button type="button" data-convert-fs="${index}" class="quiet">改為中間視</button>` : ''}</div></div>` : '');
     return `<section class="card station ${active ? 'active-station' : ''}" data-station="${index}">
       <div class="station-head"><h3>測站 ${index + 1} <small>由 ${safe(code(setup.bsPointId))} 後視</small></h3><button type="button" data-remove-station="${index}" class="quiet danger-text" title="刪除此站及後續站">刪除</button></div>
-      <div class="bs-entry"><label>後視 BS · ${safe(code(setup.bsPointId))}<input ${decimals} data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label></div>
+      <div class="bs-entry reading-value"><label>後視 BS · ${safe(code(setup.bsPointId))}<input ${decimals} data-reading data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="bsInverted" data-station="${index}" ${setup.bsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div>
       ${waitingForNext ? `<div class="next-reading"><div class="next-point-line"><label>下一點<select id="nextPoint">${nextPointOptions(draftNextPointId)}</select></label></div><div class="next-point-tools"><button type="button" data-next-unobserved="true">選下一未測點</button><button type="button" data-quick-point="S">＋S</button><button type="button" data-quick-point="TP">＋TP</button></div>
-        <div class="next-value-line"><label>讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 · 同站</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視 · 換站</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>前視 · 終點</option></select></label><label>讀數（m）<input id="nextReading" ${decimals} value="${safe(draftNextValue)}" placeholder="0.000"></label></div>
+        <div class="next-value-line"><label>讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 · 同站</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視 · 換站</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>前視 · 終點</option></select></label><div class="reading-value"><label>讀數（m）<input id="nextReading" data-reading ${decimals} value="${safe(draftNextValue)}" placeholder="0.000"></label><label class="inverted-toggle"><input id="nextInverted" type="checkbox" ${draftNextInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div></div>
         <button type="button" data-add-next="${index}" class="primary record-next">記錄此點</button></div>` : ''}
       <details class="station-records"><summary>${setup.fsPointId ? `前視 ${safe(code(setup.fsPointId))} · ${safe(setup.fs)} m` : `本站已記錄 ${(setup.intermediate || []).length} 點`} · 點開核對</summary>
         <div class="reading-actions"><button type="button" data-field-map="${safe(setup.bsPointId)}">標註 ${safe(code(setup.bsPointId))}</button></div>${recorded}
@@ -208,6 +247,7 @@ function renderStations() {
   renderRouteSelections();
   renderResult();
   renderPhotoQueue();
+  updateReadingWarnings();
 }
 
 function openFieldMap(pointId) {
@@ -232,18 +272,22 @@ function resultRows(result) {
   const adjusted = result.adjusted;
   const output = [];
   result.stations.forEach((station, index) => {
-    if (index === 0) output.push(`<tr><td>${station.index}</td><td>${safe(code(station.bsPointId))}</td><td>${formatHeight(station.bs)}</td><td></td><td></td><td>${formatHeight(station.rawStartHeight)}</td><td>${adjusted ? formatHeight(station.adjustedStartHeight) : '—'}</td><td>起點後視</td></tr>`);
+    if (index === 0) output.push(`<tr><td>${station.index}</td><td>${safe(code(station.bsPointId))}</td><td>${readingLabel(station.bs, station.bsInverted)}</td><td></td><td></td><td>${formatHeight(station.rawStartHeight)}</td><td>${adjusted ? formatHeight(station.adjustedStartHeight) : '—'}</td><td>起點後視</td></tr>`);
     for (const [sightIndex, sight] of station.intermediate.entries()) {
       const adjustedSight = station.adjustedIntermediate?.[sightIndex];
-      output.push(`<tr><td>${station.index}</td><td>${safe(code(sight.pointId))}</td><td></td><td></td><td>${formatHeight(sight.value)}</td><td>${formatHeight(sight.rawHeight)}</td><td>${adjusted ? formatHeight(adjustedSight?.adjustedHeight) : '—'}</td><td>中間視</td></tr>`);
+      output.push(`<tr><td>${station.index}</td><td>${safe(code(sight.pointId))}</td><td></td><td></td><td>${readingLabel(sight.value, sight.inverted)}</td><td>${formatHeight(sight.rawHeight)}</td><td>${adjusted ? formatHeight(adjustedSight?.adjustedHeight) : '—'}</td><td>中間視</td></tr>`);
     }
     if (station.complete) {
       const next = result.stations[index + 1];
       const note = next ? '本點前視、搬站後同點後視' : project.setups[index + 1] ? '本點前視；搬站後同點後視待填' : station.fsPointId === project.route.endId ? '預定終點前視' : '本站前視，待搬站';
-      output.push(`<tr><td>${station.index}${next ? `→${next.index}` : ''}</td><td>${safe(code(station.fsPointId))}</td><td>${next ? formatHeight(next.bs) : ''}</td><td>${formatHeight(station.fs)}</td><td></td><td>${formatHeight(station.rawEndHeight)}</td><td>${adjusted ? formatHeight(station.adjustedEndHeight) : '—'}</td><td>${note}${adjusted ? `；本站改正 ${formatMm(station.correction * 1000)} mm` : ''}</td></tr>`);
+      output.push(`<tr><td>${station.index}${next ? `→${next.index}` : ''}</td><td>${safe(code(station.fsPointId))}</td><td>${next ? readingLabel(next.bs, next.bsInverted) : ''}</td><td>${readingLabel(station.fs, station.fsInverted)}</td><td></td><td>${formatHeight(station.rawEndHeight)}</td><td>${adjusted ? formatHeight(station.adjustedEndHeight) : '—'}</td><td>${note}${adjusted ? `；本站改正 ${formatMm(station.correction * 1000)} mm` : ''}</td></tr>`);
     }
   });
   return output.join('');
+}
+
+function readingLabel(value, inverted) {
+  return `${formatHeight(value === null ? null : Math.abs(value))}${inverted ? '（倒尺）' : ''}`;
 }
 
 function resultTable(result) {
@@ -281,9 +325,9 @@ function renderResult() {
   $('#summaryTableStatus').innerHTML = `<strong>${summaryStatus(result)}</strong><div class="summary-checks">${summaryChecks(result)}</div>`;
   $('#resultMobile').innerHTML = result.stations.length ? result.stations.map(station => {
     const readings = [
-      `<div class="result-reading"><b class="reading-chip bs">BS</b><strong>${safe(code(station.bsPointId))}</strong><span>${formatHeight(station.bs)} m</span><small>起點 ${formatHeight(station.rawStartHeight)} m</small></div>`,
-      ...station.intermediate.map((sight, index) => `<div class="result-reading"><b class="reading-chip is">IS</b><strong>${safe(code(sight.pointId))}</strong><span>${formatHeight(sight.value)} m</span><small>高程 ${formatHeight(result.adjusted ? station.adjustedIntermediate?.[index]?.adjustedHeight : sight.rawHeight)} m${result.adjusted ? '（改正後）' : ''}</small></div>`),
-      ...(station.complete ? [`<div class="result-reading"><b class="reading-chip fs">FS</b><strong>${safe(code(station.fsPointId))}</strong><span>${formatHeight(station.fs)} m</span><small>高程 ${formatHeight(result.adjusted ? station.adjustedEndHeight : station.rawEndHeight)} m${result.adjusted ? '（改正後）' : ''}</small></div>`] : []),
+      `<div class="result-reading"><b class="reading-chip bs">BS</b><strong>${safe(code(station.bsPointId))}</strong><span>${readingLabel(station.bs, station.bsInverted)} m</span><small>起點 ${formatHeight(station.rawStartHeight)} m</small></div>`,
+      ...station.intermediate.map((sight, index) => `<div class="result-reading"><b class="reading-chip is">IS</b><strong>${safe(code(sight.pointId))}</strong><span>${readingLabel(sight.value, sight.inverted)} m</span><small>高程 ${formatHeight(result.adjusted ? station.adjustedIntermediate?.[index]?.adjustedHeight : sight.rawHeight)} m${result.adjusted ? '（改正後）' : ''}</small></div>`),
+      ...(station.complete ? [`<div class="result-reading"><b class="reading-chip fs">FS</b><strong>${safe(code(station.fsPointId))}</strong><span>${readingLabel(station.fs, station.fsInverted)} m</span><small>高程 ${formatHeight(result.adjusted ? station.adjustedEndHeight : station.rawEndHeight)} m${result.adjusted ? '（改正後）' : ''}</small></div>`] : []),
     ];
     return `<section class="result-station-card"><h3>測站 ${station.index}<small>${station.complete ? `${safe(code(station.bsPointId))} → ${safe(code(station.fsPointId))}` : '記錄中'}</small></h3>${readings.join('')}</section>`;
   }).join('') : '<p class="note">尚未記錄觀測讀數。</p>';
@@ -448,7 +492,9 @@ function download(name, blob) {
   const link = document.createElement('a');
   link.href = url;
   link.download = name;
+  document.body.append(link);
   link.click();
+  link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
@@ -459,7 +505,39 @@ async function exportBackup() {
     const name = `${(project.number || project.name || '水準測量').replace(/[\\/:*?"<>|]/g, '_')}_水準測量案件_${new Date().toISOString().slice(0, 10)}.json`;
     download(name, new Blob([JSON.stringify(backup)], { type: 'application/json' }));
     notify('完整案件檔已下載；請在目標資料夾核對檔案。');
-  } catch (error) { notify(`匯出失敗：${error.message}`, true); }
+    return true;
+  } catch (error) { notify(`匯出失敗：${error.message}`, true); return false; }
+}
+
+function hasCaseRecords() {
+  const entered = value => String(value ?? '').trim() !== '';
+  return project.setups.some(setup => entered(setup.bs) || entered(setup.fs) || (setup.intermediate || []).some(sight => entered(sight.value)))
+    || project.photos.length > 0 || project.equipmentPhotos.length > 0 || !!project.mapMediaId;
+}
+
+async function confirmReplacement() {
+  if (!hasCaseRecords()) return true;
+  const dialog = $('#replaceDialog');
+  dialog.returnValue = 'cancel';
+  const action = await new Promise(resolve => {
+    const choose = event => {
+      const button = event.target.closest('[data-replace]');
+      if (!button) return;
+      dialog.close(button.dataset.replace);
+    };
+    const close = () => {
+      dialog.removeEventListener('click', choose);
+      dialog.removeEventListener('close', close);
+      resolve(dialog.returnValue || 'cancel');
+    };
+    dialog.addEventListener('click', choose);
+    dialog.addEventListener('close', close);
+    dialog.showModal();
+  });
+  if (action === 'cancel') return false;
+  if (action === 'replace') return true;
+  if (!await exportBackup()) return false;
+  return confirm('請確認完整案件檔已存到目標資料夾，再繼續取代目前案件。');
 }
 
 async function exportPhotoWork(kind) {
@@ -557,7 +635,7 @@ async function importBackup(file) {
   try {
     const contents = await file.text();
     const restored = parseBackup(contents);
-    if (!confirm('開啟案件檔會取代目前裝置中的水準測量案件。請先確認已匯出目前案件。是否繼續？')) return;
+    if (!await confirmReplacement()) return;
     clearTimeout(saveTimer);
     await saveQueue;
     await replaceProject(restored.project, restored.media);
@@ -598,6 +676,7 @@ function renderAll() {
   $('#startHeightKind').value = project.route.startHeightKind || 'known';
   $('#endHeight').value = project.route.endHeight || '';
   $('#toleranceMm').value = project.route.toleranceMm || '';
+  $('#staffLengthM').value = project.route.staffLengthM ?? '5';
   $('#adjustMethod').value = project.route.adjustMethod || 'stations';
   $('#mapSource').value = project.mapSource || '';
   $('#fieldMapSource').value = project.mapSource || '';
@@ -606,13 +685,14 @@ function renderAll() {
 
 function handleRouteInput(event) {
   const mapping = { caseName: 'name', caseNo: 'number', surveyDate: 'date', observer: 'observer', rodHolder: 'rodHolder', photographer: 'photographer', instrument: 'instrument', datum: 'datum', approxLocation: 'approxLocation', mapSource: 'mapSource', fieldMapSource: 'mapSource' };
-  const routeMapping = { startHeight: 'startHeight', startHeightKind: 'startHeightKind', endHeight: 'endHeight', toleranceMm: 'toleranceMm', adjustMethod: 'adjustMethod' };
+  const routeMapping = { startHeight: 'startHeight', startHeightKind: 'startHeightKind', endHeight: 'endHeight', toleranceMm: 'toleranceMm', staffLengthM: 'staffLengthM', adjustMethod: 'adjustMethod' };
   if (mapping[event.target.id]) project[mapping[event.target.id]] = event.target.value;
   else if (routeMapping[event.target.id]) project.route[routeMapping[event.target.id]] = event.target.value;
   else return false;
   if (event.target.id === 'approxLocation') updateGoogleMapsLink();
   if (event.target.id === 'fieldMapSource') $('#mapSource').value = event.target.value;
   if (event.target.id === 'mapSource') $('#fieldMapSource').value = event.target.value;
+  if (event.target.id === 'staffLengthM') updateReadingWarnings();
   renderResult(); queueSave();
   return true;
 }
@@ -629,6 +709,7 @@ function handleStationInput(event) {
       return true;
     }
     project.setups[index][target.dataset.field] = target.value;
+    if (target.dataset.reading !== undefined) updateReadingWarning(target);
     if (target.dataset.field === 'fsPointId') renderStations();
     else { renderResult(); queueSave(); }
     if (target.dataset.field === 'fsPointId') queueSave(true);
@@ -637,6 +718,7 @@ function handleStationInput(event) {
   if (target.dataset.isPoint !== undefined || target.dataset.isValue !== undefined) {
     const [station, sight] = parsePair(target.dataset.isPoint ?? target.dataset.isValue);
     project.setups[station].intermediate[sight][target.dataset.isPoint !== undefined ? 'pointId' : 'value'] = target.value;
+    if (target.dataset.isValue !== undefined) updateReadingWarning(target);
     renderResult(); queueSave();
     return true;
   }
@@ -652,9 +734,9 @@ function bindInputs() {
       project.pointPlan[target.id === 'plannedSCount' ? 'sCount' : 'tpCount'] = target.value;
       updatePointPlanStatus(); queueSave(); return;
     }
-    if (target.id === 'nextPoint') { draftNextPointId = target.value; return; }
-    if (target.id === 'nextRole') { draftNextRole = target.value; return; }
-    if (target.id === 'nextReading') { draftNextValue = target.value; return; }
+    if (target.id === 'nextRole') { draftNextRole = target.value; if ($('#nextReading')) updateReadingWarning($('#nextReading')); return; }
+    if (target.id === 'nextPoint') { draftNextPointId = target.value; if ($('#nextReading')) updateReadingWarning($('#nextReading')); return; }
+    if (target.id === 'nextReading') { draftNextValue = target.value; updateReadingWarning(target); return; }
     if (target.dataset.pointDescription) { point(target.dataset.pointDescription).description = target.value; queueSave(); }
     if (target.dataset.photoDescription) {
       const photo = project.photos.find(item => item.id === target.dataset.photoDescription);
@@ -667,6 +749,16 @@ function bindInputs() {
   });
   document.addEventListener('change', event => {
     const target = event.target;
+    if (target.id === 'nextInverted') { draftNextInverted = target.checked; return; }
+    if (target.dataset.inverted !== undefined) {
+      project.setups[Number(target.dataset.station)][target.dataset.inverted] = target.checked;
+      renderResult(); queueSave(true); return;
+    }
+    if (target.dataset.isInverted !== undefined) {
+      const [station, sight] = parsePair(target.dataset.isInverted);
+      project.setups[station].intermediate[sight].inverted = target.checked;
+      renderResult(); queueSave(true); return;
+    }
     if (target.id === 'startId' || target.id === 'endId') {
       if (target.id === 'startId' && project.setups.length) {
         target.value = project.route.startId;
@@ -728,15 +820,17 @@ function bindActions() {
       const value = $('#nextReading')?.value.trim();
       if (index !== project.setups.length - 1 || setup.fsPointId) return;
       if (!validReading(setup.bs)) { notify('請先填妥本測站的後視 BS。', true); return; }
+      if (updateReadingWarning($(`[data-field="bs"][data-station="${index}"]`))) return;
       if (!point(pointId) || !validReading(value)) { notify('請選擇下一個點位並填入有效讀數。', true); return; }
+      if (updateReadingWarning($('#nextReading'))) return;
       if (role === 'FINISH' && pointId !== project.route.endId) { notify(`終點前視須選預定終點 ${code(project.route.endId)}。`, true); return; }
       if (role === 'MOVE' && pointId === project.route.endId) { notify('已到預定終點，請選「終點前視」。', true); return; }
       if (role === 'IS' && pointId === project.route.endId) { notify('預定終點應記為前視 FS。', true); return; }
       if (role === 'MOVE' || role === 'FINISH') {
-        setup.fsPointId = pointId; setup.fs = value;
+        setup.fsPointId = pointId; setup.fs = value; setup.fsInverted = draftNextInverted;
         if (role === 'MOVE') project.setups.push({ bsPointId: pointId, bs: '', intermediate: [], fsPointId: '', fs: '', distance: '' });
-      } else setup.intermediate.push({ pointId, value });
-      draftNextPointId = ''; draftNextValue = ''; draftNextRole = 'IS';
+      } else setup.intermediate.push({ pointId, value, inverted: draftNextInverted });
+      draftNextPointId = ''; draftNextValue = ''; draftNextRole = 'IS'; draftNextInverted = false;
       renderStations(); queueSave(true);
       if (role === 'IS') $('#nextPoint')?.focus();
       else if (role === 'MOVE') $(`[data-field="bs"][data-station="${project.setups.length - 1}"]`)?.focus();
@@ -748,15 +842,15 @@ function bindActions() {
       const setup = project.setups[station];
       if (station !== project.setups.length - 1 || sight !== setup.intermediate.length - 1 || setup.fsPointId) return;
       const reading = setup.intermediate.pop();
-      setup.fsPointId = reading.pointId; setup.fs = reading.value;
+      setup.fsPointId = reading.pointId; setup.fs = reading.value; setup.fsInverted = !!reading.inverted;
       renderStations(); queueSave(true); return;
     }
     if (target.dataset.convertFs !== undefined) {
       const index = Number(target.dataset.convertFs);
       if (index !== project.setups.length - 1) return;
       const setup = project.setups[index];
-      setup.intermediate.push({ pointId: setup.fsPointId, value: setup.fs });
-      setup.fsPointId = ''; setup.fs = '';
+      setup.intermediate.push({ pointId: setup.fsPointId, value: setup.fs, inverted: !!setup.fsInverted });
+      setup.fsPointId = ''; setup.fs = ''; setup.fsInverted = false;
       renderStations(); queueSave(true); return;
     }
     if (target.dataset.addIs !== undefined) {
@@ -874,7 +968,7 @@ function bindActions() {
   $('#mergePhotoBackup').onchange = event => { mergePhotoBackup(event.target.files[0]); event.target.value = ''; };
   $('#importBackup').onchange = event => { importBackup(event.target.files[0]); event.target.value = ''; };
   $('#newCase').onclick = async () => {
-    if (!confirm('建立新案件將取代此裝置的目前案件與照片。請先匯出完整案件檔。確定繼續？')) return;
+    if (!await confirmReplacement()) return;
     clearTimeout(saveTimer); await saveQueue;
     project = blankProject();
     await replaceProject(project, []);
@@ -960,6 +1054,7 @@ async function main() {
     bindInputs(); bindActions(); renderAll();
     if (project.photoTaskMode) switchTab('photos');
     $('#saveState').textContent = '已載入本機案件';
+    updateStorageStatus();
     if (migrated) queueSave(true);
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
   } catch (error) {

@@ -1,5 +1,5 @@
-const CACHE = 'level-survey-v0.4.3';
-const APP_FILES = ['./', './index.html', './app.js', './calc.js', './store.js', './style.css', './icon.svg', './equipment/pentax-ap-128-source.png'];
+const CACHE = 'level-survey-v0.4.4';
+const APP_FILES = ['./', './index.html', './app.js', './calc.js', './store.js', './style.css', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png', './manifest.webmanifest', './equipment/pentax-ap-128-source.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_FILES)).then(() => self.skipWaiting()));
 });
@@ -13,5 +13,12 @@ self.addEventListener('fetch', event => {
       const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(event.request, copy));
     }
     return response;
-  }).catch(() => caches.match(event.request)));
+  }).catch(async () => {
+    if (event.request.mode === 'navigate') {
+      return await caches.match(event.request, { ignoreSearch: true })
+        || await caches.match('./index.html')
+        || await caches.match('./');
+    }
+    return caches.match(event.request);
+  }));
 });

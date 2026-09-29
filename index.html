@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#164348">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <title>水準測量現場紀錄 V0.6.0</title>
+  <title>水準測量現場紀錄 V0.6.1</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icon-180.png">
@@ -13,7 +13,7 @@
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.6.0</span></h1></div><div class="top-actions"><button id="sunlightToggle" type="button" aria-pressed="false">強光模式</button><span id="offlineState" role="status" hidden>離線：本機資料仍可使用</span><span id="exportState" role="status"></span><span id="saveState" role="status">載入中</span></div></header>
+  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.6.1</span></h1></div><div class="top-actions"><button id="sunlightToggle" type="button" aria-pressed="false">強光模式</button><span id="offlineState" role="status" hidden>離線：本機資料仍可使用</span><span id="exportState" role="status"></span><span id="saveState" role="status">載入中</span></div></header>
   <nav class="tabs" aria-label="工作項目"><button data-tab="route" class="active">① 案件與位置</button><button data-tab="measure">② 觀測讀數</button><button data-tab="photos">③ 點位攝影</button><button data-tab="result">④ 計算與成果</button></nav>
   <main>
     <section id="routePanel" class="tab-panel">
@@ -50,7 +50,7 @@
       <p id="storageState" class="storage-state" role="status">本機儲存：檢查中</p><p id="iosHomeHint" class="note" hidden>可用 Safari 分享 → 加入主畫面。離開現場前仍請匯出案件檔。</p>
     </section>
     <section id="measurePanel" class="tab-panel" hidden>
-      <div class="section-head measure-head"><h2>現場讀數</h2><p id="routeSummary"></p><div class="measure-controls"><label><input id="wakeLockToggle" type="checkbox" checked> 螢幕常亮</label><span id="wakeLockState" role="status"></span><button id="undoLast" type="button" disabled>復原上一步</button></div><details class="measure-help"><summary>操作說明與觀測要點</summary><p>依實際讀法選中間視、換站前視或終點前視；換站後在同一點讀後視。檢查尺豎直、氣泡居中、視線與視距條件；依現場程序複核讀數及轉點。復原紀錄只保留到重新整理前。</p></details></div>
+      <div class="section-head measure-head"><h2>現場讀數</h2><p id="routeSummary"></p><div class="measure-controls"><label><input id="wakeLockToggle" type="checkbox" checked> 螢幕常亮</label><span id="wakeLockState" role="status"></span><button id="undoLast" type="button" disabled>復原上一步</button></div><details class="measure-help"><summary>操作說明與觀測要點</summary><p>依實際讀法選中間視、換站前視或終點前視；換站後在同一點讀後視。檢查尺豎直、氣泡居中、視線與視距條件；依現場程序複核讀數及轉點。復原紀錄只保留到重新整理前。</p></details><p id="measureNotice" role="status" aria-live="polite"></p></div>
       <div id="stationList"></div>
       <div id="measureActions" class="toolbar bottom"><button id="addStation" type="button" class="primary">開始第一站</button><button id="quickS" type="button" hidden>＋ S 點</button><button id="quickTP" type="button" hidden>＋ TP 點</button></div>
       <div id="undoToast" class="undo-toast" role="status" hidden><span id="undoToastText"></span><button id="undoToastButton" type="button">復原</button></div>
@@ -75,6 +75,7 @@
       <div class="card"><h2>成果交付</h2><p class="note">整份報告含點位圖、原始讀數、閉合檢核、改正後高程、點位照片及設備照片。另請匯出完整案件檔保存可編輯資料及本案圖像原檔。</p><button id="printReport" type="button" class="primary">列印整份報告／另存 PDF</button><button id="exportBackup2" type="button">匯出完整案件檔</button><button id="shareBackup" type="button" hidden>分享完整案件檔</button><label class="file-button">驗證案件檔指紋<input id="verifyBackup" type="file" accept=".json,application/json" hidden></label><p id="fingerprintResult" class="note" role="status"></p></div>
     </section>
   </main>
+  <dialog id="pointPickerDialog" class="point-picker-dialog" aria-labelledby="pointPickerTitle"><div class="dialog-head"><h2 id="pointPickerTitle">選擇下一點</h2><button id="closePointPicker" type="button">關閉</button></div><label>搜尋點號或說明<input id="pointSearch" type="search" autocomplete="off" placeholder="例如 S12、圍牆角"></label><div id="pointPickerList" class="point-picker-list"></div></dialog>
   <dialog id="fieldMapDialog" class="field-map-dialog" aria-labelledby="fieldMapTitle"><div class="dialog-head"><h2 id="fieldMapTitle">點位標註</h2><button id="closeFieldMap" type="button">關閉</button></div><p id="fieldMapMessage" class="note"></p><div class="toolbar"><a id="fieldGoogleMaps" class="file-button" href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer">開啟 Google 地圖</a><label class="file-button">匯入位置圖<input id="fieldMapFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div><label>底圖來源／截圖日期<input id="fieldMapSource" maxlength="240" placeholder="例如 Google Maps，截圖日期 2026-09-27"></label><div id="fieldMapHolder"></div><p class="note">點圖面即可放置標記；暫不標註也可關閉，稍後再補。</p></dialog>
   <dialog id="replaceDialog" class="replace-dialog" aria-labelledby="replaceTitle"><h2 id="replaceTitle">取代目前案件</h2><p>目前案件已有資料。請選擇取代前的處理方式。</p><div class="replace-actions"><button type="button" data-replace="export" class="primary">先匯出完整案件檔再繼續</button><button type="button" data-replace="replace" class="danger">不匯出，直接取代</button><button type="button" data-replace="cancel">取消</button></div></dialog>
   <dialog id="editReasonDialog" class="replace-dialog"><h2>記錄更正原因</h2><p id="editReasonContext"></p><label>原因<select id="editReasonChoice"><option value="讀錯重讀">讀錯重讀</option><option value="抄錄錯誤">抄錄錯誤</option><option value="點號更正">點號更正</option><option value="單位誤植（mm→m）">單位誤植（mm→m）</option><option value="other">其他</option></select></label><label>其他原因<input id="editReasonOther" maxlength="200"></label><div class="replace-actions"><button id="saveEditReason" type="button" class="primary">儲存更正</button><button id="cancelEditReason" type="button">取消</button></div></dialog>

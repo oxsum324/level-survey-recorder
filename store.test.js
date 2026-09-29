@@ -28,3 +28,17 @@ test('existing V0.1 case backups without equipment photos remain readable', () =
   const restored = parseBackup(JSON.stringify({ format: 'level-survey-case.v1', project: oldProject, media: [] }));
   assert.equal(restored.media.length, 0);
 });
+
+for (const version of ['0.4.3', '0.5.0']) test(`V${version} backup keeps original readings and optional V0.6 fields absent`, () => {
+  const old = {
+    schema: 1, appVersion: version, id: `legacy-${version}`,
+    points: [{ id: 'bm1', code: 'BM1', type: 'BM' }, { id: 's1', code: 'S1', type: 'S' }],
+    route: { startId: 'bm1', endId: 'bm1', startHeight: '10.000' },
+    setups: [{ bsPointId: 'bm1', bs: '1.000', intermediate: [{ pointId: 's1', value: '0.500' }], fsPointId: 'bm1', fs: '1.000', distance: '' }],
+    photos: [], mapMediaId: null,
+  };
+  const restored = parseBackup(JSON.stringify({ format: 'level-survey-case.v1', project: old, media: [] }));
+  assert.equal(restored.project.setups[0].intermediate[0].value, '0.500');
+  assert.equal(restored.project.auditLog, undefined);
+  assert.equal(restored.project.setups[0].bsAt, undefined);
+});

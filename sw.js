@@ -1,5 +1,5 @@
-const CACHE = 'level-survey-v0.5.0';
-const APP_FILES = ['./', './index.html', './app.js', './calc.js', './store.js', './style.css', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png', './manifest.webmanifest', './equipment/pentax-ap-128-source.png'];
+const CACHE = 'level-survey-v0.6.0';
+const APP_FILES = ['./', './index.html', './app.js', './calc.js', './store.js', './audit.js', './integrity.js', './exif.js', './observation.js', './style.css', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png', './manifest.webmanifest', './equipment/pentax-ap-128-source.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_FILES)).then(() => self.skipWaiting()));
 });

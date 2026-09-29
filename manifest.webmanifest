@@ -1,0 +1,14 @@
+{
+  "name": "水準測量現場紀錄",
+  "short_name": "水準紀錄",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#164348",
+  "background_color": "#f3f6f5",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

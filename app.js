@@ -20,6 +20,7 @@ let saveTimer;
 let saveQueue = Promise.resolve();
 let placingPointId = null;
 let draftNextPointId = '';
+let draftPointManual = false;
 let draftNextRole = 'IS';
 let draftNextValue = '';
 let draftNextInverted = false;
@@ -75,12 +76,13 @@ function normalizeProject() {
 function point(id) { return project.points.find(item => item.id === id); }
 function code(id) { return point(id)?.code || '未指定'; }
 function notify(message, danger = false) {
-  const box = $('#message');
+  const inline = !$('#measurePanel')?.hidden ? $('#measureNotice') : null;
+  const box = inline || $('#message');
   box.textContent = message;
   box.className = danger ? 'danger' : '';
   box.hidden = false;
   clearTimeout(box._timer);
-  box._timer = setTimeout(() => { box.hidden = true; }, 7000);
+  box._timer = setTimeout(() => { if (inline) box.textContent = ''; else box.hidden = true; }, 7000);
 }
 
 function updateGoogleMapsLink() {
@@ -248,12 +250,49 @@ function options(items, selected, placeholder = '請選擇點位') {
     `<option value="${safe(item.id)}" ${item.id === selected ? 'selected' : ''}>${safe(item.code)} · ${safe(item.type)}</option>`).join('');
 }
 
-function nextPointOptions(selected) {
+function nextPointChoices() {
   const observed = observedPointIds();
-  const option = item => `<option value="${safe(item.id)}" ${item.id === selected ? 'selected' : ''}>${safe(item.code)} · ${safe(item.type)}</option>`;
-  const waiting = project.points.filter(item => !observed.has(item.id));
-  const used = project.points.filter(item => observed.has(item.id));
-  return `<option value="">請選擇點位</option>${waiting.length ? `<optgroup label="尚未觀測">${waiting.map(option).join('')}</optgroup>` : ''}${used.length ? `<optgroup label="已觀測／回測">${used.map(option).join('')}</optgroup>` : ''}`;
+  const waiting = project.points.filter(item => item.type !== 'BM' && !observed.has(item.id));
+  const end = point(project.route.endId);
+  const remaining = project.points.filter(item => !waiting.includes(item) && item.id !== end?.id);
+  return [...waiting, ...(end ? [end] : []), ...remaining];
+}
+
+function ensureNextPoint() {
+  if (!point(draftNextPointId)) draftNextPointId = nextPointChoices()[0]?.id || '';
+  if (draftNextPointId === project.route.endId) draftNextRole = 'FINISH';
+  else if (draftNextRole === 'FINISH') draftNextRole = 'IS';
+  return point(draftNextPointId);
+}
+
+function resetNextDraft() {
+  draftNextPointId = '';
+  draftPointManual = false;
+  draftNextRole = 'IS';
+  draftNextValue = '';
+  draftNextInverted = false;
+}
+
+function selectNextPoint(id) {
+  if (!point(id)) return;
+  draftNextPointId = id;
+  draftPointManual = true;
+  if (id === project.route.endId) draftNextRole = 'FINISH';
+  else if (draftNextRole === 'FINISH') draftNextRole = 'IS';
+  const input = $('#nextPoint');
+  if (input) input.value = id;
+  const button = $('#nextPointPicker');
+  if (button) button.textContent = `${code(id)} · ${observedPointIds().has(id) ? '已觀測／回測' : '未觀測'} ▾`;
+  if ($('#nextRole')) $('#nextRole').value = draftNextRole;
+  if ($('#nextReading')) updateReadingWarning($('#nextReading'));
+}
+
+function renderPointPicker() {
+  const observed = observedPointIds();
+  const query = $('#pointSearch').value.trim().toLocaleLowerCase();
+  const matches = nextPointChoices().filter(item => `${item.code} ${item.description || ''}`.toLocaleLowerCase().includes(query));
+  const group = (title, items) => items.length ? `<section><h3>${title} <small>${items.length}</small></h3>${items.map(item => `<button type="button" data-pick-point="${safe(item.id)}" aria-pressed="${item.id === draftNextPointId}"><strong>${safe(item.code)}</strong><small>${safe(item.description || item.type)}</small></button>`).join('')}</section>` : '';
+  $('#pointPickerList').innerHTML = group('未觀測', matches.filter(item => !observed.has(item.id))) + group('已觀測／回測', matches.filter(item => observed.has(item.id))) || '<p class="note">找不到符合的點位。</p>';
 }
 
 function updatePointPlanStatus() {
@@ -421,6 +460,7 @@ function updateWireFeedback(result = calculate(project)) {
 function renderStations() {
   synchronizeSetups();
   const computed = calculate(project);
+  ensureNextPoint();
   const card = (setup, index) => {
     const active = index === project.setups.length - 1;
     const waitingForNext = active && !setup.fsPointId && setup.fs === '';
@@ -436,7 +476,7 @@ function renderStations() {
       <div class="station-head"><h3>測站 ${index + 1} <small>由 ${safe(code(setup.bsPointId))} 後視</small></h3><button type="button" data-remove-station="${index}" class="quiet danger-text" title="刪除此站及後續站">刪除</button></div>
       <div class="bs-entry reading-value"><label>後視 BS · ${safe(code(setup.bsPointId))}<input ${decimals} data-reading data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="bsInverted" data-station="${index}" ${setup.bsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(setup.bsPointId), 'bs')}${correctionNote(index + 1, code(setup.bsPointId), 'bsInverted')}</div>
       ${wireFields(setup, index, 'bs')}
-      ${waitingForNext ? `<div class="next-reading"><div class="next-point-line"><label>下一點<select id="nextPoint">${nextPointOptions(draftNextPointId)}</select></label></div><div class="next-point-tools"><button type="button" data-next-unobserved="true">選下一未測點</button><button type="button" data-quick-point="S">＋S</button><button type="button" data-quick-point="TP">＋TP</button></div>
+      ${waitingForNext ? `<div class="next-reading"><div class="next-point-label">下一點</div><div class="next-point-line"><button type="button" data-cycle-point="-1" aria-label="前一個點位">‹</button><button type="button" id="nextPointPicker" aria-haspopup="dialog">${safe(code(draftNextPointId))} · ${observedPointIds().has(draftNextPointId) ? '已觀測／回測' : '未觀測'} ▾</button><button type="button" data-cycle-point="1" aria-label="後一個點位">›</button><input type="hidden" id="nextPoint" value="${safe(draftNextPointId)}"></div><div class="next-point-tools"><button type="button" data-quick-point="S">＋ S 點</button><button type="button" data-quick-point="TP">＋ TP 點</button></div>
         <div class="next-value-line"><label>讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 · 同站</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視 · 換站</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>前視 · 終點</option></select></label><div class="reading-value"><label>讀數（m）<input id="nextReading" data-reading ${decimals} value="${safe(draftNextValue)}" placeholder="0.000"></label><label class="inverted-toggle"><input id="nextInverted" type="checkbox" ${draftNextInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div></div>
         <button type="button" data-add-next="${index}" class="primary record-next">記錄此點</button></div>` : ''}
       <details class="station-records"><summary>${setup.fsPointId ? `前視 ${safe(code(setup.fsPointId))} · ${safe(setup.fs)} m` : `本站已記錄 ${(setup.intermediate || []).length} 點`} · 點開核對</summary>
@@ -588,14 +628,14 @@ function nextCode(type) {
 function addPoint(type, selectNext = false) {
   const item = { id: uid(), code: nextCode(type), type, description: '', position: null };
   project.points.push(item);
-  if (selectNext) draftNextPointId = item.id;
+  if (selectNext) { draftNextPointId = item.id; draftPointManual = true; if (draftNextRole === 'FINISH') draftNextRole = 'IS'; }
+  else if (!draftPointManual) draftNextPointId = '';
   renderPoints();
   renderStations();
   renderPhotos();
   queueSave(true);
-  if (selectNext) $('#nextReading')?.focus();
-  else $(`[data-point-code="${item.id}"]`)?.focus();
-  notify(`${item.code} 已建立；可填位置說明並放到圖上。`);
+  if (!selectNext) $(`[data-point-code="${item.id}"]`)?.focus();
+  notify(selectNext ? `${item.code} 已選為下一點。` : `${item.code} 已建立；可稍後在圖上標註。`);
 }
 
 function createPlannedPoints() {
@@ -615,6 +655,7 @@ function createPlannedPoints() {
       added.push(item.code);
     }
   }
+  if (!draftPointManual) draftNextPointId = '';
   renderPointPlan(); renderPoints(); renderStations(); queueSave(true);
   notify(added.length ? `已建立 ${added.join('、')}；讀數保持空白，觀測時再選讀法。` : '現有點位已達預計數量；沒有刪除或重編任何點號。');
 }
@@ -921,6 +962,7 @@ async function importBackup(file) {
     await saveQueue;
     await replaceProject(restored.project, restored.media);
     project = restored.project;
+    resetNextDraft();
     if (normalizeProject()) queueSave(true);
     revokePhotos();
     renderAll();
@@ -935,6 +977,7 @@ function switchTab(name) {
     $(`.tabs [data-tab="${tab}"]`).classList.toggle('active', tab === name);
   }
   document.body.classList.toggle('measure-mode', name === 'measure');
+  if (name === 'measure') $('#message').hidden = true;
   if (name === 'route') renderPoints();
   if (name === 'photos') renderPhotos();
   window.scrollTo(0, 0);
@@ -1048,6 +1091,7 @@ function bindInputs() {
   });
   document.addEventListener('input', event => {
     const target = event.target;
+    if (target.id === 'pointSearch') { renderPointPicker(); return; }
     const address = readingAddress(target);
     if (address && (entryStart.get(target) ?? String(address.item[address.key] ?? '')) !== '' && String(address.item[address.key]) !== target.value) {
       updateReadingWarning(target);
@@ -1070,7 +1114,6 @@ function bindInputs() {
       updatePointPlanStatus(); queueSave(); return;
     }
     if (target.id === 'nextRole') { draftNextRole = target.value; if ($('#nextReading')) updateReadingWarning($('#nextReading')); return; }
-    if (target.id === 'nextPoint') { draftNextPointId = target.value; if ($('#nextReading')) updateReadingWarning($('#nextReading')); return; }
     if (target.id === 'nextReading') { draftNextValue = target.value; updateReadingWarning(target); return; }
     if (target.dataset.pointDescription) { point(target.dataset.pointDescription).description = target.value; queueSave(); }
     if (target.dataset.photoDescription) {
@@ -1180,15 +1223,23 @@ function bindActions() {
       if (input) input.value = measured;
       updateWireFeedback(renderResult()); queueSave(true); return;
     }
-    if (target.dataset.nextUnobserved !== undefined) {
-      const observed = observedPointIds();
-      const next = project.points.find(item => item.type !== 'BM' && !observed.has(item.id)) || project.points.find(item => item.id === project.route.endId && !observed.has(item.id));
-      if (!next) { notify('預排點位已全部觀測；可手動選回測點，或臨時新增點位。'); return; }
-      draftNextPointId = next.id;
-      draftNextRole = next.id === project.route.endId ? 'FINISH' : next.type === 'TP' ? 'MOVE' : 'IS';
-      $('#nextPoint').value = next.id;
-      $('#nextRole').value = draftNextRole;
-      $('#nextReading')?.focus();
+    if (target.id === 'nextPointPicker') {
+      $('#pointSearch').value = '';
+      renderPointPicker();
+      $('#pointPickerDialog').showModal();
+      return;
+    }
+    if (target.id === 'closePointPicker') { $('#pointPickerDialog').close(); return; }
+    if (target.dataset.pickPoint) {
+      selectNextPoint(target.dataset.pickPoint);
+      $('#pointPickerDialog').close();
+      return;
+    }
+    if (target.dataset.cyclePoint !== undefined) {
+      const choices = nextPointChoices();
+      const current = choices.findIndex(item => item.id === draftNextPointId);
+      const next = (current + Number(target.dataset.cyclePoint) + choices.length) % choices.length;
+      if (choices.length) selectNextPoint(choices[next].id);
       return;
     }
     if (target.dataset.quickPoint) { addPoint(target.dataset.quickPoint, true); return; }
@@ -1219,13 +1270,11 @@ function bindActions() {
         setup.fsPointId = pointId; setup.fs = value; setup.fsInverted = draftNextInverted; setup.fsAt = stamp(); updateEnvironmentTimes(setup.fsAt);
         if (role === 'MOVE') project.setups.push({ bsPointId: pointId, bs: '', intermediate: [], fsPointId: '', fs: '', distance: '' });
       } else { const at = stamp(); setup.intermediate.push({ pointId, value, inverted: draftNextInverted, at }); updateEnvironmentTimes(at); }
-      draftNextPointId = ''; draftNextValue = ''; draftNextRole = 'IS'; draftNextInverted = false;
+      resetNextDraft();
       renderStations(); queueSave(true);
       const height = role === 'IS' ? calculate(project).stations[index]?.intermediate.at(-1)?.rawHeight : calculate(project).stations[index]?.rawEndHeight;
       notify(`${code(pointId)} 已記錄；暫算高程 ${formatHeight(height)} m（未改正）。`);
-      if (role === 'IS') $('#nextPoint')?.focus();
-      else if (role === 'MOVE') $(`[data-field="bs"][data-station="${project.setups.length - 1}"]`)?.focus();
-      else switchTab('result');
+      if (role === 'FINISH') switchTab('result');
       return;
     }
     if (target.dataset.convertIs) {
@@ -1416,6 +1465,7 @@ function bindActions() {
     if (!await confirmReplacement()) return;
     clearTimeout(saveTimer); await saveQueue;
     project = blankProject();
+    resetNextDraft();
     await replaceProject(project, []);
     revokePhotos(); renderAll(); switchTab('route'); notify('已建立新案件。');
   };

@@ -295,6 +295,23 @@ function renderPointPicker() {
   $('#pointPickerList').innerHTML = group('未觀測', matches.filter(item => !observed.has(item.id))) + group('已觀測／回測', matches.filter(item => observed.has(item.id))) || '<p class="note">找不到符合的點位。</p>';
 }
 
+function canDeletePoint(id) {
+  return id !== project.route.startId && id !== project.route.endId &&
+    !project.setups.some(setup => setup.bsPointId === id || setup.fsPointId === id ||
+      (setup.intermediate || []).some(sight => sight.pointId === id)) &&
+    !project.photos.some(photo => photo.pointId === id);
+}
+
+function renderDeletePointList() {
+  const query = $('#deletePointSearch').value.trim().toLocaleLowerCase();
+  const unused = project.points.filter(item => canDeletePoint(item.id) &&
+    `${item.code} ${item.description || ''}`.toLocaleLowerCase().includes(query)).reverse();
+  $('#deletePointList').innerHTML = unused.length
+    ? `<section class="delete-point-list"><h3>可刪除 ${unused.length} 點</h3>${unused.map(item =>
+      `<div class="delete-point-row"><span><strong>${safe(item.code)}</strong><small>${safe(item.description || item.type)}</small></span><button type="button" data-delete-point="${safe(item.id)}" class="danger-text">刪除</button></div>`).join('')}</section>`
+    : '<p class="note">沒有符合的未使用點位。</p>';
+}
+
 function updatePointPlanStatus() {
   const sCount = project.points.filter(item => item.type === 'S').length;
   const tpCount = project.points.filter(item => item.type === 'TP').length;
@@ -476,7 +493,7 @@ function renderStations() {
       <div class="station-head"><h3>測站 ${index + 1} <small>由 ${safe(code(setup.bsPointId))} 後視</small></h3><button type="button" data-remove-station="${index}" class="quiet danger-text" title="刪除此站及後續站">刪除</button></div>
       <div class="bs-entry reading-value"><label>後視 BS · ${safe(code(setup.bsPointId))}<input ${decimals} data-reading data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="bsInverted" data-station="${index}" ${setup.bsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(setup.bsPointId), 'bs')}${correctionNote(index + 1, code(setup.bsPointId), 'bsInverted')}</div>
       ${wireFields(setup, index, 'bs')}
-      ${waitingForNext ? `<div class="next-reading"><div class="next-point-label">下一點</div><div class="next-point-line"><button type="button" data-cycle-point="-1" aria-label="前一個點位">‹</button><button type="button" id="nextPointPicker" aria-haspopup="dialog">${safe(code(draftNextPointId))} · ${observedPointIds().has(draftNextPointId) ? '已觀測／回測' : '未觀測'} ▾</button><button type="button" data-cycle-point="1" aria-label="後一個點位">›</button><input type="hidden" id="nextPoint" value="${safe(draftNextPointId)}"></div><div class="next-point-tools"><button type="button" data-quick-point="S">＋ S 點</button><button type="button" data-quick-point="TP">＋ TP 點</button></div>
+      ${waitingForNext ? `<div class="next-reading"><div class="next-point-label">下一點</div><div class="next-point-line"><button type="button" data-cycle-point="-1" aria-label="前一個點位">‹</button><button type="button" id="nextPointPicker" aria-haspopup="dialog">${safe(code(draftNextPointId))} · ${observedPointIds().has(draftNextPointId) ? '已觀測／回測' : '未觀測'} ▾</button><button type="button" data-cycle-point="1" aria-label="後一個點位">›</button><input type="hidden" id="nextPoint" value="${safe(draftNextPointId)}"></div>
         <div class="next-value-line"><label>讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 · 同站</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視 · 換站</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>前視 · 終點</option></select></label><div class="reading-value"><label>讀數（m）<input id="nextReading" data-reading ${decimals} value="${safe(draftNextValue)}" placeholder="0.000"></label><label class="inverted-toggle"><input id="nextInverted" type="checkbox" ${draftNextInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div></div>
         <button type="button" data-add-next="${index}" class="primary record-next">記錄此點</button></div>` : ''}
       <details class="station-records"><summary>${setup.fsPointId ? `前視 ${safe(code(setup.fsPointId))} · ${safe(setup.fs)} m` : `本站已記錄 ${(setup.intermediate || []).length} 點`} · 點開核對</summary>
@@ -634,7 +651,7 @@ function addPoint(type, selectNext = false) {
   renderStations();
   renderPhotos();
   queueSave(true);
-  if (!selectNext) $(`[data-point-code="${item.id}"]`)?.focus();
+  if (!selectNext && !$('#routePanel').hidden) $(`[data-point-code="${item.id}"]`)?.focus();
   notify(selectNext ? `${item.code} 已選為下一點。` : `${item.code} 已建立；可稍後在圖上標註。`);
 }
 
@@ -661,15 +678,18 @@ function createPlannedPoints() {
 }
 
 function deletePoint(id) {
-  if (id === project.route.startId || id === project.route.endId || project.setups.some(setup =>
-    setup.bsPointId === id || setup.fsPointId === id || (setup.intermediate || []).some(sight => sight.pointId === id)) ||
-    project.photos.some(photo => photo.pointId === id)) {
+  if (!canDeletePoint(id)) {
     notify('此點已用於測線、讀數或照片；先調整關聯才能刪除。', true);
     return;
   }
-  if (!confirm(`刪除點位 ${code(id)}？`)) return;
+  const deletedCode = code(id);
+  const draftWarning = id === draftNextPointId && draftNextValue ? '尚未記錄的下一點讀數也會清除。' : '';
+  if (!confirm(`刪除點位 ${deletedCode}？${draftWarning}`)) return;
+  if (id === draftNextPointId) resetNextDraft();
   project.points = project.points.filter(item => item.id !== id);
   renderPoints(); renderStations(); renderPhotos(); queueSave(true);
+  if ($('#deletePointDialog').open) renderDeletePointList();
+  notify(`${deletedCode} 已刪除。`);
 }
 
 function revokePhotos() {
@@ -1242,7 +1262,6 @@ function bindActions() {
       if (choices.length) selectNextPoint(choices[next].id);
       return;
     }
-    if (target.dataset.quickPoint) { addPoint(target.dataset.quickPoint, true); return; }
     if (target.dataset.fieldMap) { openFieldMap(target.dataset.fieldMap); return; }
     if (target.dataset.selectPhotoPoint) { $('#photoPoint').value = target.dataset.selectPhotoPoint; $('#photoDescription').focus(); return; }
     if (target.dataset.place) {
@@ -1380,8 +1399,16 @@ function bindActions() {
   $('#addS').onclick = () => addPoint('S');
   $('#addTP').onclick = () => addPoint('TP');
   $('#createPlannedPoints').onclick = createPlannedPoints;
-  $('#quickS').onclick = () => addPoint('S', true);
-  $('#quickTP').onclick = () => addPoint('TP', true);
+  $('#quickBM').onclick = () => addPoint('BM', !!$('#nextPoint'));
+  $('#quickS').onclick = () => addPoint('S', !!$('#nextPoint'));
+  $('#quickTP').onclick = () => addPoint('TP', !!$('#nextPoint'));
+  $('#openDeletePoint').onclick = () => {
+    $('#deletePointSearch').value = '';
+    renderDeletePointList();
+    $('#deletePointDialog').showModal();
+  };
+  $('#closeDeletePoint').onclick = () => $('#deletePointDialog').close();
+  $('#deletePointSearch').oninput = renderDeletePointList;
   $('#addStation').onclick = () => {
     const previous = project.setups.at(-1);
     if (previous && (!previous.fsPointId || !validReading(previous.fs))) { notify('請先填妥上一站的前視點與讀數。', true); return; }
@@ -1611,7 +1638,7 @@ async function buildReportPreview() {
   const mapWidthMm = image.naturalWidth && image.naturalHeight ? Math.min(180, 125 * image.naturalWidth / image.naturalHeight) : 180;
   const map = project.mapMediaId && mapUrl ? `<div class="print-map" style="width:${mapWidthMm.toFixed(2)}mm"><img src="${mapUrl}" alt="水準測量點位圖">${reportedPoints.filter(item => validPosition(item.position)).map(item => `<span class="map-marker ${safe(item.type.toLowerCase())}" style="left:${item.position.x}%;top:${item.position.y}%"><b>${safe(item.code)}</b></span>`).join('')}</div>` : '<p>未附位置圖</p>';
   const photos = project.photos.filter(photo => observed.has(photo.pointId)).map(photo => `<article class="print-photo"><p><strong>點位 ${safe(code(photo.pointId))}</strong>｜${safe(photo.description || point(photo.pointId)?.description || '未填位置說明')}</p><img src="${safe(photoUrls.get(photo.id) || '')}" alt="${safe(code(photo.pointId))} 照片"><small>攝影者：${safe(photo.photographer || '未記錄')}｜原檔：${safe(photo.name)}｜拍攝時間：${safe(photoTime(photo))}</small></article>`).join('');
-  const referenceEquipmentPhoto = project.instrument.toUpperCase().includes(DEFAULT_INSTRUMENT) ? '<article class="print-photo reference-equipment"><p><strong>PENTAX AP-128 水準儀</strong>｜公司設備參考照，非本案測量當日拍攝。</p><img src="./equipment/pentax-ap-128-source.png" alt="PENTAX AP-128 公司設備參考照"><small>來源：使用者提供之原始照片，原圖保留。</small></article>' : '';
+  const referenceEquipmentPhoto = project.instrument.toUpperCase().includes(DEFAULT_INSTRUMENT) ? '<article class="print-photo reference-equipment"><p><strong>PENTAX AP-128 水準儀</strong>｜公司設備參考照，非本案測量當日拍攝。</p><img src="./equipment/pentax-ap-128.jpg" alt="PENTAX AP-128 公司設備參考照"><small>來源：使用者提供之原始照片，原圖保留。</small></article>' : '';
   const equipmentPhotos = project.equipmentPhotos.map(photo => `<article class="print-photo"><p><strong>${safe(photo.instrument)} 本案設備照片</strong>｜${safe(photo.description || '未填設備說明')}</p><img src="${safe(equipmentPhotoUrls.get(photo.id) || '')}" alt="${safe(photo.instrument)} 設備照片"><small>原檔：${safe(photo.name)}｜拍攝時間：${safe(photoTime(photo))}</small></article>`).join('');
   const instrumentCheck = project.instrumentCheck || {};
   const peg = twoPegCheck(instrumentCheck.twoPeg);

@@ -91,6 +91,8 @@
 
 .measure-head #measureNotice{order:5;flex-basis:100%;min-height:1.25em;margin:0;color:#1c665d;font-size:.8rem;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .measure-head #measureNotice.danger{color:#a3332d!important}
+.measure-point-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.4rem;margin:.45rem 0}.measure-point-actions button{min-width:0;padding:.38rem .25rem;min-height:40px;font-size:.82rem}
+.delete-point-list{display:grid!important;grid-template-columns:1fr!important;gap:.35rem!important}.delete-point-row{display:flex;align-items:center;justify-content:space-between;gap:.6rem;border:1px solid #d7e5e1;border-radius:8px;padding:.35rem .5rem}.delete-point-row span{display:flex;flex-direction:column;min-width:0}.delete-point-row small{color:#58716e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.delete-point-row button{flex:none;min-height:36px;padding:.3rem .7rem}
 .next-point-label{font-size:.79rem;font-weight:650;margin-bottom:.22rem}
 .next-point-line{display:grid;grid-template-columns:42px minmax(0,1fr) 42px;gap:.35rem;align-items:center}
 .next-point-line button{min-width:0;margin:0;min-height:42px}

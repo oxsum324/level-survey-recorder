@@ -1,9 +1,10 @@
 import { buildSummaryCsv, calculate, formatHeight, formatMm, formatObservationTime, formulaToleranceMm, readingIssue, suggestMmCorrection, twoPegCheck, VERSION } from './calc.js';
 import { loadProject, saveProject, saveMedia, loadMedia, deleteMedia, replaceProject, makeBackup, parseBackup } from './store.js';
-import { resolveObservedEdit, actionEntry } from './audit.js';
+import { resolveObservedEdit, actionEntry, pointDeletionEntry, auditReportEntry } from './audit.js';
 import { fingerprint, sha256Blob } from './integrity.js';
 import { captureTime } from './exif.js';
 import { setFirstObservedAt } from './observation.js';
+import { renderPagedPdf } from './pdf-pages.js';
 
 const $ = selector => document.querySelector(selector);
 const uid = () => crypto.randomUUID();
@@ -95,11 +96,19 @@ function updateGoogleMapsLink() {
 
 function updateExportState() {
   const dirty = !!project.lastModifiedAt && (!project.lastExportedAt || project.lastModifiedAt > project.lastExportedAt);
-  $('#exportState').textContent = dirty ? '有未匯出變更' : '完整案件已匯出';
+  $('#exportState').textContent = dirty ? '有未匯出變更' : project.lastExportedAt ? `已匯出 ${localInputTime(project.lastExportedAt).slice(11, 16)}` : '尚未匯出';
   $('#exportState').classList.toggle('dirty', dirty);
 }
 
 function updateOnlineState() { $('#offlineState').hidden = navigator.onLine; }
+
+function readPreference(key, fallback) {
+  try { return localStorage.getItem(key) ?? fallback; } catch (_) { return fallback; }
+}
+
+function writePreference(key, value) {
+  try { localStorage.setItem(key, value); } catch (_) { /* Preferences are optional. */ }
+}
 
 async function updateWakeLock() {
   const enabled = $('#wakeLockToggle').checked && !$('#measurePanel').hidden && document.visibilityState === 'visible';
@@ -117,7 +126,8 @@ async function updateWakeLock() {
   } catch (_) { $('#wakeLockState').textContent = '目前無法啟用'; }
 }
 
-function queueSave(immediate = false, modified = true) {
+function queueSave(immediate = false, modified = true, preserveUndo = false) {
+  if (modified && !preserveUndo) clearUndo();
   project.updatedAt = stamp();
   if (modified) project.lastModifiedAt = project.updatedAt;
   updateExportState();
@@ -159,9 +169,16 @@ function updateEnvironmentTimes(at) {
   if ($('#envStart')) renderEnvironment();
 }
 
+function clearUndo() {
+  undoStack.length = 0;
+  clearTimeout(undoTimer);
+  $('#undoLast').disabled = true;
+  $('#undoToast').hidden = true;
+}
+
 function pushUndo(label, station, pointCode, field, from, to) {
-  undoStack.push({ setups: structuredClone(project.setups), label, station, pointCode, field, from, to });
-  if (undoStack.length > 20) undoStack.shift();
+  clearUndo();
+  undoStack.push({ setups: structuredClone(project.setups), pointCodes: Object.fromEntries(project.points.map(item => [item.id, item.code])), label, station, pointCode, field, from, to });
   $('#undoLast').disabled = false;
   $('#undoToastText').textContent = label;
   $('#undoToast').hidden = false;
@@ -170,12 +187,21 @@ function pushUndo(label, station, pointCode, field, from, to) {
 }
 
 function logAction(type, station, pointCode, field, from, to, reason) {
-  project.auditLog.push(actionEntry({ id: uid(), at: stamp(), type, station, pointCode, field, from, to, reason }));
+  const entry = actionEntry({ id: uid(), at: stamp(), type, station, pointCode, field, from, to, reason });
+  entry.pointId = project.points.find(item => item.code === pointCode)?.id;
+  project.auditLog.push(entry);
 }
 
 function undoLast() {
   const previous = undoStack.pop();
   if (!previous) return;
+  const ids = previous.setups.flatMap(setup => [setup.bsPointId, setup.fsPointId, ...(setup.intermediate || []).map(sight => sight.pointId)]).filter(Boolean);
+  const missing = [...new Set(ids)].filter(id => !point(id));
+  clearUndo();
+  if (missing.length) {
+    notify(`快照中的點位 ${missing.map(id => previous.pointCodes[id] || id).join('、')} 已刪除，無法復原`, true);
+    return;
+  }
   project.setups = previous.setups;
   logAction('undo', previous.station, previous.pointCode, previous.field, previous.to, previous.from, `復原：${previous.label}`);
   $('#undoLast').disabled = !undoStack.length;
@@ -428,7 +454,7 @@ function applyMmCorrection(input, correction) {
     input.value = correction;
     renderStations(); queueSave(true);
   } else {
-    input.value = correction; draftNextValue = correction; updateReadingWarning(input);
+    clearUndo(); input.value = correction; draftNextValue = correction; updateReadingWarning(input);
   }
 }
 
@@ -685,6 +711,7 @@ function deletePoint(id) {
   const deletedCode = code(id);
   const draftWarning = id === draftNextPointId && draftNextValue ? '尚未記錄的下一點讀數也會清除。' : '';
   if (!confirm(`刪除點位 ${deletedCode}？${draftWarning}`)) return;
+  project.auditLog.push(pointDeletionEntry({ id: uid(), at: stamp(), point: point(id), project }));
   if (id === draftNextPointId) resetNextDraft();
   project.points = project.points.filter(item => item.id !== id);
   renderPoints(); renderStations(); renderPhotos(); queueSave(true);
@@ -838,15 +865,36 @@ async function verifyBackup(file) {
 }
 
 async function exportBackup(share = false) {
+  const target = project;
+  const previousExportedAt = target.lastExportedAt;
+  const exportedAt = stamp();
+  let delivered = false;
   try {
-    await new Promise(resolve => setTimeout(resolve, 0));
-    const backup = await makeBackup(structuredClone(project));
+    target.lastExportedAt = exportedAt;
+    const backup = await makeBackup(structuredClone(target), { onEstimate: showBackupEstimate });
     const name = `${(project.number || project.name || '水準測量').replace(/[\\/:*?"<>|]/g, '_')}_水準測量案件_${new Date().toISOString().slice(0, 10)}.json`;
-    if (!await deliverFile(name, new Blob([JSON.stringify(backup)], { type: 'application/json' }), share)) return false;
-    project.lastExportedAt = stamp(); queueSave(true, false);
+    if (!await deliverFile(name, backup, share)) return false;
+    delivered = true;
+    if (project === target) queueSave(true, false);
     notify(share ? '完整案件檔已分享。' : '完整案件檔已下載；請在目標資料夾核對檔案。');
     return true;
   } catch (error) { notify(`匯出失敗：${error.message}`, true); return false; }
+  finally {
+    if (!delivered && target.lastExportedAt === exportedAt) {
+      target.lastExportedAt = previousExportedAt;
+      if (project === target) queueSave(true, false);
+    }
+  }
+}
+
+function showBackupEstimate(bytes) {
+  const text = bytes > 100 * 1024 * 1024
+    ? `檔案約 ${(bytes / 1024 / 1024).toFixed(1)} MB，手機匯出可能較久或失敗，可改在電腦匯出` : '';
+  for (const id of ['backupSizeNotice', 'backupSizeNotice2']) {
+    $(`#${id}`).textContent = text;
+    $(`#${id}`).hidden = !text;
+  }
+  if (text) notify(text);
 }
 
 function hasCaseRecords() {
@@ -893,10 +941,10 @@ async function exportPhotoWork(kind, share = false) {
       workProject.photos = [];
       workProject.equipmentPhotos = [];
     }
-    const backup = await makeBackup(workProject);
+    const backup = await makeBackup(workProject, { onEstimate: showBackupEstimate });
     const label = kind === 'task' ? '攝影工作檔' : '攝影成果';
     const name = `${(project.number || project.name || '水準測量').replace(/[\\/:*?"<>|]/g, '_')}_${label}_${new Date().toISOString().slice(0, 10)}.json`;
-    if (!await deliverFile(name, new Blob([JSON.stringify(backup)], { type: 'application/json' }), share)) return;
+    if (!await deliverFile(name, backup, share)) return;
     notify(`${label}已${share ? '分享' : '下載'}；請將此檔交給另一位作業者。`);
   } catch (error) { notify(`匯出失敗：${error.message}`, true); }
 }
@@ -954,6 +1002,7 @@ async function mergePhotoBackup(file) {
       project.photos = [...oldPhotos, ...additions];
       project.lastModifiedAt = stamp(); updateExportState();
       await saveProject(structuredClone(project));
+      clearUndo();
       $('#mapSource').value = project.mapSource || '';
       $('#fieldMapSource').value = project.mapSource || '';
       renderPoints();
@@ -981,6 +1030,7 @@ async function importBackup(file) {
     clearTimeout(saveTimer);
     await saveQueue;
     await replaceProject(restored.project, restored.media);
+    clearUndo();
     project = restored.project;
     resetNextDraft();
     if (normalizeProject()) queueSave(true);
@@ -1134,7 +1184,7 @@ function bindInputs() {
       updatePointPlanStatus(); queueSave(); return;
     }
     if (target.id === 'nextRole') { draftNextRole = target.value; if ($('#nextReading')) updateReadingWarning($('#nextReading')); return; }
-    if (target.id === 'nextReading') { draftNextValue = target.value; updateReadingWarning(target); return; }
+    if (target.id === 'nextReading') { clearUndo(); draftNextValue = target.value; updateReadingWarning(target); return; }
     if (target.dataset.pointDescription) { point(target.dataset.pointDescription).description = target.value; queueSave(); }
     if (target.dataset.photoDescription) {
       const photo = project.photos.find(item => item.id === target.dataset.photoDescription);
@@ -1148,7 +1198,7 @@ function bindInputs() {
   document.addEventListener('change', event => {
     const target = event.target;
     if (target.dataset.checkStatus !== undefined) { project.checklist.items[Number(target.dataset.checkStatus)].status = target.value; queueSave(true); return; }
-    if (target.id === 'nextInverted') { draftNextInverted = target.checked; return; }
+    if (target.id === 'nextInverted') { clearUndo(); draftNextInverted = target.checked; return; }
     if (target.dataset.inverted !== undefined) {
       project.setups[Number(target.dataset.station)][target.dataset.inverted] = target.checked;
       renderResult(); queueSave(true); return;
@@ -1305,7 +1355,7 @@ function bindActions() {
       setup.fsPointId = reading.pointId; setup.fs = reading.value; setup.fsInverted = !!reading.inverted;
       setup.fsAt = reading.at; setup.fsUpper = reading.upper || ''; setup.fsLower = reading.lower || ''; setup.fsUpperAt = reading.upperAt; setup.fsLowerAt = reading.lowerAt;
       logAction('convert', station + 1, code(reading.pointId), 'role', 'IS', 'FS', '觀測角色轉換');
-      renderStations(); queueSave(true); return;
+      renderStations(); queueSave(true, true, true); return;
     }
     if (target.dataset.convertFs !== undefined) {
       const index = Number(target.dataset.convertFs);
@@ -1316,7 +1366,7 @@ function bindActions() {
       logAction('convert', index + 1, code(setup.fsPointId), 'role', 'FS', 'IS', '觀測角色轉換');
       setup.fsPointId = ''; setup.fs = ''; setup.fsInverted = false; setup.fsUpper = ''; setup.fsLower = '';
       setup.fsAt = ''; setup.fsUpperAt = ''; setup.fsLowerAt = '';
-      renderStations(); queueSave(true); return;
+      renderStations(); queueSave(true, true, true); return;
     }
     if (target.dataset.addIs !== undefined) {
       project.setups[Number(target.dataset.addIs)].intermediate.push({ pointId: '', value: '' });
@@ -1328,14 +1378,14 @@ function bindActions() {
       pushUndo('已移除中間視', station + 1, code(previous.pointId), 'is', previous.value, '');
       logAction('delete', station + 1, code(previous.pointId), 'is', previous.value, '', '移除中間視');
       project.setups[station].intermediate.splice(sight, 1);
-      renderStations(); queueSave(true); return;
+      renderStations(); queueSave(true, true, true); return;
     }
     if (target.dataset.removeStation !== undefined) {
       const index = Number(target.dataset.removeStation);
       if (confirm(`刪除第 ${index + 1} 站及其後續測站？`)) {
         pushUndo(`已刪除第 ${index + 1} 站及後續測站`, index + 1, code(project.setups[index]?.bsPointId), 'station', JSON.stringify(project.setups.slice(index)), '');
         logAction('delete', index + 1, code(project.setups[index]?.bsPointId), 'station', JSON.stringify(project.setups.slice(index)), '', '刪除測站');
-        project.setups.splice(index); renderStations(); queueSave(true);
+        project.setups.splice(index); renderStations(); queueSave(true, true, true);
       }
       return;
     }
@@ -1388,9 +1438,9 @@ function bindActions() {
     const enabled = !document.documentElement.classList.contains('sunlight');
     document.documentElement.classList.toggle('sunlight', enabled);
     $('#sunlightToggle').setAttribute('aria-pressed', String(enabled));
-    localStorage.setItem('level-survey-sunlight', enabled ? '1' : '0');
+    writePreference('level-survey-sunlight', enabled ? '1' : '0');
   };
-  $('#wakeLockToggle').onchange = () => { localStorage.setItem('level-survey-wake-lock', $('#wakeLockToggle').checked ? '1' : '0'); updateWakeLock(); };
+  $('#wakeLockToggle').onchange = () => { writePreference('level-survey-wake-lock', $('#wakeLockToggle').checked ? '1' : '0'); updateWakeLock(); };
   document.addEventListener('visibilitychange', updateWakeLock);
   window.addEventListener('online', updateOnlineState);
   window.addEventListener('offline', updateOnlineState);
@@ -1494,6 +1544,7 @@ function bindActions() {
     project = blankProject();
     resetNextDraft();
     await replaceProject(project, []);
+    clearUndo();
     revokePhotos(); renderAll(); switchTab('route'); notify('已建立新案件。');
   };
   $('#printReport').onclick = () => preparePreview('report');
@@ -1559,7 +1610,7 @@ async function preparePdf(report, buildId) {
       try { return [...sheet.cssRules].map(rule => rule.cssText).join('\n'); }
       catch (_) { return ''; }
     }).join('\n');
-    const blob = await window.html2pdf().set({
+    const blob = await renderPagedPdf(report, {
       margin: 15,
       image: { type: 'jpeg', quality: 0.96 },
       html2canvas: { scale: 2, useCORS: false, scrollY: 0, logging: false, onclone: cloned => {
@@ -1569,7 +1620,9 @@ async function preparePdf(report, buildId) {
       } },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'] },
-    }).from(report).outputPdf('blob');
+    }, { isCurrent: () => buildId === previewBuildId, onProgress: (page, pages) => {
+      if (buildId === previewBuildId) $('#pdfStatus').textContent = `正在建立 PDF：第 ${page}／${pages} 頁…`;
+    } });
     if (buildId !== previewBuildId) return;
     if (!(blob instanceof Blob) || blob.size < 1000) throw new Error('產出的檔案內容不完整');
     for (let index = 0; index < 10 && document.querySelectorAll('#printPanel').length > 1; index++) await new Promise(resolve => setTimeout(resolve, 50));
@@ -1663,7 +1716,7 @@ async function buildReportPreview() {
     <h2>三、點位照片</h2>${photos || '<p>未附點位照片。</p>'}
     <h2>四、儀器檢校與設備照片</h2>${calibration}${referenceEquipmentPhoto}${equipmentPhotos}${referenceEquipmentPhoto || equipmentPhotos ? '' : '<p>未附設備照片。</p>'}
     <h2>五、開工前檢核</h2><table><thead><tr><th>項目</th><th>紀錄狀態</th></tr></thead><tbody>${project.checklist.items.map(item => `<tr><td>${safe(item.label)}</td><td>${safe({ done: '已執行', pending: '未執行', na: '不適用' }[item.status] || '未選')}</td></tr>`).join('')}</tbody></table><p>檢核備註：${safe(project.checklist.notes || '未填')}</p>
-    <h2>六、讀數更正與操作紀錄</h2>${project.auditLog.length ? `<table><thead><tr><th>時間</th><th>測站／點位</th><th>欄位</th><th>原值</th><th>新值</th><th>原因</th></tr></thead><tbody>${project.auditLog.map(item => `<tr><td>${safe(dateTime(item.at))}</td><td>第 ${safe(item.station)} 站／${safe(item.pointCode)}</td><td>${safe(item.field)}</td><td><del>${safe(item.from)}</del></td><td>${safe(item.to)}</td><td>${safe(item.reason)}</td></tr>`).join('')}</tbody></table>` : '<p>無更正紀錄。</p>'}
+    <h2>六、讀數更正與操作紀錄</h2>${project.auditLog.length ? `<table><thead><tr><th>時間</th><th>測站／點位</th><th>欄位</th><th>原值</th><th>新值</th><th>原因</th></tr></thead><tbody>${project.auditLog.map(auditReportEntry).map(item => `<tr><td>${safe(dateTime(item.at))}</td><td>第 ${safe(item.station)} 站／${safe(item.pointCode)}</td><td>${safe(item.field)}</td><td><del>${safe(item.from)}</del></td><td>${safe(item.to)}</td><td>${safe(item.reason)}</td></tr>`).join('')}</tbody></table>` : '<p>無更正紀錄。</p>'}
     <footer>列印時間：${safe(new Date().toLocaleString('zh-TW'))}｜來源工具：水準測量現場紀錄 V${VERSION}｜資料指紋 SHA-256：${hash.slice(0, 16)}…<br>完整指紋：${hash}</footer>`;
   $('#printPanel')?.remove();
   $('#previewSheet').append(report);
@@ -1683,10 +1736,10 @@ async function main() {
     if (!project.schema || project.schema !== 1) throw new Error('本機案件格式不受此版本支援。');
     const migrated = normalizeProject();
     bindInputs(); bindActions(); renderAll();
-    const sunlight = localStorage.getItem('level-survey-sunlight') === '1';
+    const sunlight = readPreference('level-survey-sunlight', '0') === '1';
     document.documentElement.classList.toggle('sunlight', sunlight);
     $('#sunlightToggle').setAttribute('aria-pressed', String(sunlight));
-    $('#wakeLockToggle').checked = localStorage.getItem('level-survey-wake-lock') !== '0';
+    $('#wakeLockToggle').checked = readPreference('level-survey-wake-lock', '1') !== '0';
     for (const id of ['shareBackup', 'sharePhotoTask', 'sharePhotoResult', 'shareCsv']) $(`#${id}`).hidden = !canShareFile();
     updateOnlineState(); updateWakeLock();
     if (project.photoTaskMode) switchTab('photos');

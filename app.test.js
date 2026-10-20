@@ -95,3 +95,27 @@ test('L3 deleting a previously observed point preserves its identity in the case
   assert.equal(h.run('project.auditLog.at(-1).pointCode'), 'S1');
   assert.equal(h.run('project.auditLog.at(-1).wasObserved'), true);
 });
+
+test('L4 exported snapshots contain the successful export time and reopen as exported', async () => {
+  const h = caseWithReading();
+  h.run(`makeBackup = async snapshot => ({ format: 'level-survey-case.v1', project: snapshot, media: [] });
+    deliverFile = async (name, blob) => { globalThis.deliveredBackup = await blob.text(); return true; };`);
+  assert.equal(await h.run('exportBackup()'), true);
+  const exportedAt = h.run('project.lastExportedAt');
+  assert.equal(JSON.parse(h.context.deliveredBackup).project.lastExportedAt, exportedAt);
+  h.context.importFile = { text: async () => h.context.deliveredBackup };
+  await h.run('importBackup(importFile)');
+  h.run('updateExportState()');
+  assert.match(h.node('#exportState').textContent, /^已匯出 \d{2}:\d{2}$/);
+});
+
+test('L4 failed or cancelled delivery restores the previous export marker', async () => {
+  for (const delivery of ['return false', "throw new Error('下載失敗')"]) {
+    const h = caseWithReading();
+    h.run(`project.lastExportedAt = '2026-01-01T00:00:00.000Z';
+      makeBackup = async snapshot => ({ project: snapshot });
+      deliverFile = async () => { ${delivery}; };`);
+    assert.equal(await h.run('exportBackup(true)'), false);
+    assert.equal(h.run('project.lastExportedAt'), '2026-01-01T00:00:00.000Z');
+  }
+});

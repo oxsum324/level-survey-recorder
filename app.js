@@ -95,7 +95,7 @@ function updateGoogleMapsLink() {
 
 function updateExportState() {
   const dirty = !!project.lastModifiedAt && (!project.lastExportedAt || project.lastModifiedAt > project.lastExportedAt);
-  $('#exportState').textContent = dirty ? '有未匯出變更' : '完整案件已匯出';
+  $('#exportState').textContent = dirty ? '有未匯出變更' : project.lastExportedAt ? `已匯出 ${localInputTime(project.lastExportedAt).slice(11, 16)}` : '尚未匯出';
   $('#exportState').classList.toggle('dirty', dirty);
 }
 
@@ -856,15 +856,26 @@ async function verifyBackup(file) {
 }
 
 async function exportBackup(share = false) {
+  const target = project;
+  const previousExportedAt = target.lastExportedAt;
+  const exportedAt = stamp();
+  let delivered = false;
   try {
-    await new Promise(resolve => setTimeout(resolve, 0));
-    const backup = await makeBackup(structuredClone(project));
+    target.lastExportedAt = exportedAt;
+    const backup = await makeBackup(structuredClone(target));
     const name = `${(project.number || project.name || '水準測量').replace(/[\\/:*?"<>|]/g, '_')}_水準測量案件_${new Date().toISOString().slice(0, 10)}.json`;
     if (!await deliverFile(name, new Blob([JSON.stringify(backup)], { type: 'application/json' }), share)) return false;
-    project.lastExportedAt = stamp(); queueSave(true, false);
+    delivered = true;
+    if (project === target) queueSave(true, false);
     notify(share ? '完整案件檔已分享。' : '完整案件檔已下載；請在目標資料夾核對檔案。');
     return true;
   } catch (error) { notify(`匯出失敗：${error.message}`, true); return false; }
+  finally {
+    if (!delivered && target.lastExportedAt === exportedAt) {
+      target.lastExportedAt = previousExportedAt;
+      if (project === target) queueSave(true, false);
+    }
+  }
 }
 
 function hasCaseRecords() {

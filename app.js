@@ -159,6 +159,13 @@ function updateEnvironmentTimes(at) {
   if ($('#envStart')) renderEnvironment();
 }
 
+function clearUndo() {
+  undoStack.length = 0;
+  clearTimeout(undoTimer);
+  $('#undoLast').disabled = true;
+  $('#undoToast').hidden = true;
+}
+
 function pushUndo(label, station, pointCode, field, from, to) {
   undoStack.push({ setups: structuredClone(project.setups), label, station, pointCode, field, from, to });
   if (undoStack.length > 20) undoStack.shift();
@@ -954,6 +961,7 @@ async function mergePhotoBackup(file) {
       project.photos = [...oldPhotos, ...additions];
       project.lastModifiedAt = stamp(); updateExportState();
       await saveProject(structuredClone(project));
+      clearUndo();
       $('#mapSource').value = project.mapSource || '';
       $('#fieldMapSource').value = project.mapSource || '';
       renderPoints();
@@ -981,6 +989,7 @@ async function importBackup(file) {
     clearTimeout(saveTimer);
     await saveQueue;
     await replaceProject(restored.project, restored.media);
+    clearUndo();
     project = restored.project;
     resetNextDraft();
     if (normalizeProject()) queueSave(true);
@@ -1494,6 +1503,7 @@ function bindActions() {
     project = blankProject();
     resetNextDraft();
     await replaceProject(project, []);
+    clearUndo();
     revokePhotos(); renderAll(); switchTab('route'); notify('已建立新案件。');
   };
   $('#printReport').onclick = () => preparePreview('report');

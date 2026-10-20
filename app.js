@@ -101,6 +101,14 @@ function updateExportState() {
 
 function updateOnlineState() { $('#offlineState').hidden = navigator.onLine; }
 
+function readPreference(key, fallback) {
+  try { return localStorage.getItem(key) ?? fallback; } catch (_) { return fallback; }
+}
+
+function writePreference(key, value) {
+  try { localStorage.setItem(key, value); } catch (_) { /* Preferences are optional. */ }
+}
+
 async function updateWakeLock() {
   const enabled = $('#wakeLockToggle').checked && !$('#measurePanel').hidden && document.visibilityState === 'visible';
   if (!enabled) {
@@ -1419,9 +1427,9 @@ function bindActions() {
     const enabled = !document.documentElement.classList.contains('sunlight');
     document.documentElement.classList.toggle('sunlight', enabled);
     $('#sunlightToggle').setAttribute('aria-pressed', String(enabled));
-    localStorage.setItem('level-survey-sunlight', enabled ? '1' : '0');
+    writePreference('level-survey-sunlight', enabled ? '1' : '0');
   };
-  $('#wakeLockToggle').onchange = () => { localStorage.setItem('level-survey-wake-lock', $('#wakeLockToggle').checked ? '1' : '0'); updateWakeLock(); };
+  $('#wakeLockToggle').onchange = () => { writePreference('level-survey-wake-lock', $('#wakeLockToggle').checked ? '1' : '0'); updateWakeLock(); };
   document.addEventListener('visibilitychange', updateWakeLock);
   window.addEventListener('online', updateOnlineState);
   window.addEventListener('offline', updateOnlineState);
@@ -1715,10 +1723,10 @@ async function main() {
     if (!project.schema || project.schema !== 1) throw new Error('本機案件格式不受此版本支援。');
     const migrated = normalizeProject();
     bindInputs(); bindActions(); renderAll();
-    const sunlight = localStorage.getItem('level-survey-sunlight') === '1';
+    const sunlight = readPreference('level-survey-sunlight', '0') === '1';
     document.documentElement.classList.toggle('sunlight', sunlight);
     $('#sunlightToggle').setAttribute('aria-pressed', String(sunlight));
-    $('#wakeLockToggle').checked = localStorage.getItem('level-survey-wake-lock') !== '0';
+    $('#wakeLockToggle').checked = readPreference('level-survey-wake-lock', '1') !== '0';
     for (const id of ['shareBackup', 'sharePhotoTask', 'sharePhotoResult', 'shareCsv']) $(`#${id}`).hidden = !canShareFile();
     updateOnlineState(); updateWakeLock();
     if (project.photoTaskMode) switchTab('photos');

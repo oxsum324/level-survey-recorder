@@ -13,7 +13,7 @@ export function appHarness(overrides = {}) {
   const node = selector => {
     if (!nodes.has(selector)) nodes.set(selector, {
       value: '', textContent: '', hidden: false, disabled: false, checked: false, dataset: {},
-      classList: { add() {}, remove() {}, toggle() {} },
+      classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
       setAttribute() {}, addEventListener() {}, focus() {}, close() {}, showModal() {},
     });
     return nodes.get(selector);

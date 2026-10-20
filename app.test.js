@@ -134,3 +134,22 @@ test('L5 an unsupported import leaves the active case and its undo snapshot inta
   assert.equal(h.node('#undoLast').disabled, false);
   assert.match(h.messages.at(-1), /schema 2/);
 });
+
+test('L6 blocked localStorage keeps case startup, preferences and observation available', async () => {
+  let registered = false;
+  const h = appHarness({
+    loadProject: async () => null,
+    localStorage: { getItem() { throw new Error('SecurityError'); }, setItem() { throw new Error('SecurityError'); } },
+    navigator: { serviceWorker: { register: async () => { registered = true; } } },
+  });
+  h.run('updateStorageStatus = () => {}');
+  await h.run('main()');
+  assert.equal(h.node('#saveState').textContent, '已載入本機案件');
+  assert.equal(h.node('#wakeLockToggle').checked, true);
+  assert.equal(h.run("readPreference('unknown', 'default')"), 'default');
+  assert.equal(registered, true);
+  assert.doesNotThrow(() => h.node('#sunlightToggle').onclick());
+  assert.doesNotThrow(() => h.node('#wakeLockToggle').onchange());
+  h.node('#addStation').onclick();
+  assert.equal(h.run('project.setups.length'), 1);
+});

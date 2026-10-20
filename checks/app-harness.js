@@ -35,7 +35,7 @@ export function appHarness(overrides = {}) {
   vm.runInContext(source, context);
   const run = code => vm.runInContext(code, context);
   context.testMessages = messages;
-  run(`renderStations = renderPoints = renderPhotos = renderMap = renderAll = switchTab = queueSave = () => {};
+  run(`renderStations = renderPoints = renderPhotos = renderMap = renderAll = switchTab = () => {};
     notify = message => testMessages.push(message); confirmReplacement = async () => true;`);
   return {
     context, node, run, messages,

@@ -43,3 +43,46 @@ test('L1 a successful photography merge clears the undo snapshot', async () => {
   assert.equal(h.node('#undoLast').disabled, true);
   assert.equal(h.run("point('s1').description"), '圍牆角');
 });
+
+test('L2 an immediate undo restores the removed IS and retains its audit trail', () => {
+  const h = caseWithReading();
+  h.click({ removeIs: '0:0' });
+  h.run('undoLast()');
+  assert.equal(h.run('project.setups[0].intermediate[0].value'), '0.500');
+  assert.equal(h.run("project.auditLog.map(item => item.type).join(',')"), 'delete,undo');
+  assert.equal(h.node('#undoLast').disabled, true);
+});
+
+test('L2 recording a new reading invalidates undo without losing the new observation', () => {
+  const h = caseWithReading();
+  h.click({ removeIs: '0:0' });
+  h.node('#nextPoint').value = 's1';
+  h.node('#nextRole').value = 'IS';
+  h.node('#nextReading').value = '0.600';
+  h.run('updateReadingWarning = () => null');
+  h.click({ addNext: '0' });
+  assert.equal(h.node('#undoLast').disabled, true);
+  h.run('undoLast()');
+  assert.equal(h.run('project.setups[0].intermediate[0].value'), '0.600');
+  assert.equal(h.run("project.auditLog.some(item => item.type === 'undo')"), false);
+});
+
+test('L2 a missing snapshot point rejects restoration and identifies the deleted point', () => {
+  const h = caseWithReading();
+  h.click({ removeIs: '0:0' });
+  h.run("project.points = project.points.filter(item => item.id !== 's1')");
+  h.run('undoLast()');
+  assert.equal(h.run('project.setups[0].intermediate.length'), 0);
+  assert.equal(h.node('#undoLast').disabled, true);
+  assert.equal(h.messages.at(-1), '快照中的點位 S1 已刪除，無法復原');
+});
+
+test('L2 adding or deleting points and saving reading changes invalidate snapshots', () => {
+  for (const mutation of ["addPoint('TP')", "deletePoint('s1')", "project.setups[0].bs = '1.100'; queueSave(true)"]) {
+    const h = caseWithReading();
+    h.click({ removeIs: '0:0' });
+    h.run(mutation);
+    assert.equal(h.node('#undoLast').disabled, true, mutation);
+    assert.equal(h.run('undoStack.length'), 0, mutation);
+  }
+});

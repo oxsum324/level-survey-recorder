@@ -117,7 +117,8 @@ async function updateWakeLock() {
   } catch (_) { $('#wakeLockState').textContent = '目前無法啟用'; }
 }
 
-function queueSave(immediate = false, modified = true) {
+function queueSave(immediate = false, modified = true, preserveUndo = false) {
+  if (modified && !preserveUndo) clearUndo();
   project.updatedAt = stamp();
   if (modified) project.lastModifiedAt = project.updatedAt;
   updateExportState();
@@ -167,8 +168,8 @@ function clearUndo() {
 }
 
 function pushUndo(label, station, pointCode, field, from, to) {
-  undoStack.push({ setups: structuredClone(project.setups), label, station, pointCode, field, from, to });
-  if (undoStack.length > 20) undoStack.shift();
+  clearUndo();
+  undoStack.push({ setups: structuredClone(project.setups), pointCodes: Object.fromEntries(project.points.map(item => [item.id, item.code])), label, station, pointCode, field, from, to });
   $('#undoLast').disabled = false;
   $('#undoToastText').textContent = label;
   $('#undoToast').hidden = false;
@@ -183,6 +184,13 @@ function logAction(type, station, pointCode, field, from, to, reason) {
 function undoLast() {
   const previous = undoStack.pop();
   if (!previous) return;
+  const ids = previous.setups.flatMap(setup => [setup.bsPointId, setup.fsPointId, ...(setup.intermediate || []).map(sight => sight.pointId)]).filter(Boolean);
+  const missing = [...new Set(ids)].filter(id => !point(id));
+  clearUndo();
+  if (missing.length) {
+    notify(`快照中的點位 ${missing.map(id => previous.pointCodes[id] || id).join('、')} 已刪除，無法復原`, true);
+    return;
+  }
   project.setups = previous.setups;
   logAction('undo', previous.station, previous.pointCode, previous.field, previous.to, previous.from, `復原：${previous.label}`);
   $('#undoLast').disabled = !undoStack.length;
@@ -435,7 +443,7 @@ function applyMmCorrection(input, correction) {
     input.value = correction;
     renderStations(); queueSave(true);
   } else {
-    input.value = correction; draftNextValue = correction; updateReadingWarning(input);
+    clearUndo(); input.value = correction; draftNextValue = correction; updateReadingWarning(input);
   }
 }
 
@@ -1143,7 +1151,7 @@ function bindInputs() {
       updatePointPlanStatus(); queueSave(); return;
     }
     if (target.id === 'nextRole') { draftNextRole = target.value; if ($('#nextReading')) updateReadingWarning($('#nextReading')); return; }
-    if (target.id === 'nextReading') { draftNextValue = target.value; updateReadingWarning(target); return; }
+    if (target.id === 'nextReading') { clearUndo(); draftNextValue = target.value; updateReadingWarning(target); return; }
     if (target.dataset.pointDescription) { point(target.dataset.pointDescription).description = target.value; queueSave(); }
     if (target.dataset.photoDescription) {
       const photo = project.photos.find(item => item.id === target.dataset.photoDescription);
@@ -1157,7 +1165,7 @@ function bindInputs() {
   document.addEventListener('change', event => {
     const target = event.target;
     if (target.dataset.checkStatus !== undefined) { project.checklist.items[Number(target.dataset.checkStatus)].status = target.value; queueSave(true); return; }
-    if (target.id === 'nextInverted') { draftNextInverted = target.checked; return; }
+    if (target.id === 'nextInverted') { clearUndo(); draftNextInverted = target.checked; return; }
     if (target.dataset.inverted !== undefined) {
       project.setups[Number(target.dataset.station)][target.dataset.inverted] = target.checked;
       renderResult(); queueSave(true); return;
@@ -1314,7 +1322,7 @@ function bindActions() {
       setup.fsPointId = reading.pointId; setup.fs = reading.value; setup.fsInverted = !!reading.inverted;
       setup.fsAt = reading.at; setup.fsUpper = reading.upper || ''; setup.fsLower = reading.lower || ''; setup.fsUpperAt = reading.upperAt; setup.fsLowerAt = reading.lowerAt;
       logAction('convert', station + 1, code(reading.pointId), 'role', 'IS', 'FS', '觀測角色轉換');
-      renderStations(); queueSave(true); return;
+      renderStations(); queueSave(true, true, true); return;
     }
     if (target.dataset.convertFs !== undefined) {
       const index = Number(target.dataset.convertFs);
@@ -1325,7 +1333,7 @@ function bindActions() {
       logAction('convert', index + 1, code(setup.fsPointId), 'role', 'FS', 'IS', '觀測角色轉換');
       setup.fsPointId = ''; setup.fs = ''; setup.fsInverted = false; setup.fsUpper = ''; setup.fsLower = '';
       setup.fsAt = ''; setup.fsUpperAt = ''; setup.fsLowerAt = '';
-      renderStations(); queueSave(true); return;
+      renderStations(); queueSave(true, true, true); return;
     }
     if (target.dataset.addIs !== undefined) {
       project.setups[Number(target.dataset.addIs)].intermediate.push({ pointId: '', value: '' });
@@ -1337,14 +1345,14 @@ function bindActions() {
       pushUndo('已移除中間視', station + 1, code(previous.pointId), 'is', previous.value, '');
       logAction('delete', station + 1, code(previous.pointId), 'is', previous.value, '', '移除中間視');
       project.setups[station].intermediate.splice(sight, 1);
-      renderStations(); queueSave(true); return;
+      renderStations(); queueSave(true, true, true); return;
     }
     if (target.dataset.removeStation !== undefined) {
       const index = Number(target.dataset.removeStation);
       if (confirm(`刪除第 ${index + 1} 站及其後續測站？`)) {
         pushUndo(`已刪除第 ${index + 1} 站及後續測站`, index + 1, code(project.setups[index]?.bsPointId), 'station', JSON.stringify(project.setups.slice(index)), '');
         logAction('delete', index + 1, code(project.setups[index]?.bsPointId), 'station', JSON.stringify(project.setups.slice(index)), '', '刪除測站');
-        project.setups.splice(index); renderStations(); queueSave(true);
+        project.setups.splice(index); renderStations(); queueSave(true, true, true);
       }
       return;
     }

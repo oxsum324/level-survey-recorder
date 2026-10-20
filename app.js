@@ -1,6 +1,6 @@
 import { buildSummaryCsv, calculate, formatHeight, formatMm, formatObservationTime, formulaToleranceMm, readingIssue, suggestMmCorrection, twoPegCheck, VERSION } from './calc.js';
 import { loadProject, saveProject, saveMedia, loadMedia, deleteMedia, replaceProject, makeBackup, parseBackup } from './store.js';
-import { resolveObservedEdit, actionEntry } from './audit.js';
+import { resolveObservedEdit, actionEntry, pointDeletionEntry, auditReportEntry } from './audit.js';
 import { fingerprint, sha256Blob } from './integrity.js';
 import { captureTime } from './exif.js';
 import { setFirstObservedAt } from './observation.js';
@@ -178,7 +178,9 @@ function pushUndo(label, station, pointCode, field, from, to) {
 }
 
 function logAction(type, station, pointCode, field, from, to, reason) {
-  project.auditLog.push(actionEntry({ id: uid(), at: stamp(), type, station, pointCode, field, from, to, reason }));
+  const entry = actionEntry({ id: uid(), at: stamp(), type, station, pointCode, field, from, to, reason });
+  entry.pointId = project.points.find(item => item.code === pointCode)?.id;
+  project.auditLog.push(entry);
 }
 
 function undoLast() {
@@ -700,6 +702,7 @@ function deletePoint(id) {
   const deletedCode = code(id);
   const draftWarning = id === draftNextPointId && draftNextValue ? '尚未記錄的下一點讀數也會清除。' : '';
   if (!confirm(`刪除點位 ${deletedCode}？${draftWarning}`)) return;
+  project.auditLog.push(pointDeletionEntry({ id: uid(), at: stamp(), point: point(id), project }));
   if (id === draftNextPointId) resetNextDraft();
   project.points = project.points.filter(item => item.id !== id);
   renderPoints(); renderStations(); renderPhotos(); queueSave(true);
@@ -1681,7 +1684,7 @@ async function buildReportPreview() {
     <h2>三、點位照片</h2>${photos || '<p>未附點位照片。</p>'}
     <h2>四、儀器檢校與設備照片</h2>${calibration}${referenceEquipmentPhoto}${equipmentPhotos}${referenceEquipmentPhoto || equipmentPhotos ? '' : '<p>未附設備照片。</p>'}
     <h2>五、開工前檢核</h2><table><thead><tr><th>項目</th><th>紀錄狀態</th></tr></thead><tbody>${project.checklist.items.map(item => `<tr><td>${safe(item.label)}</td><td>${safe({ done: '已執行', pending: '未執行', na: '不適用' }[item.status] || '未選')}</td></tr>`).join('')}</tbody></table><p>檢核備註：${safe(project.checklist.notes || '未填')}</p>
-    <h2>六、讀數更正與操作紀錄</h2>${project.auditLog.length ? `<table><thead><tr><th>時間</th><th>測站／點位</th><th>欄位</th><th>原值</th><th>新值</th><th>原因</th></tr></thead><tbody>${project.auditLog.map(item => `<tr><td>${safe(dateTime(item.at))}</td><td>第 ${safe(item.station)} 站／${safe(item.pointCode)}</td><td>${safe(item.field)}</td><td><del>${safe(item.from)}</del></td><td>${safe(item.to)}</td><td>${safe(item.reason)}</td></tr>`).join('')}</tbody></table>` : '<p>無更正紀錄。</p>'}
+    <h2>六、讀數更正與操作紀錄</h2>${project.auditLog.length ? `<table><thead><tr><th>時間</th><th>測站／點位</th><th>欄位</th><th>原值</th><th>新值</th><th>原因</th></tr></thead><tbody>${project.auditLog.map(auditReportEntry).map(item => `<tr><td>${safe(dateTime(item.at))}</td><td>第 ${safe(item.station)} 站／${safe(item.pointCode)}</td><td>${safe(item.field)}</td><td><del>${safe(item.from)}</del></td><td>${safe(item.to)}</td><td>${safe(item.reason)}</td></tr>`).join('')}</tbody></table>` : '<p>無更正紀錄。</p>'}
     <footer>列印時間：${safe(new Date().toLocaleString('zh-TW'))}｜來源工具：水準測量現場紀錄 V${VERSION}｜資料指紋 SHA-256：${hash.slice(0, 16)}…<br>完整指紋：${hash}</footer>`;
   $('#printPanel')?.remove();
   $('#previewSheet').append(report);

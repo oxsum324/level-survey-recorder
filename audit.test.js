@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { actionEntry, resolveObservedEdit } from './audit.js';
+import { actionEntry, resolveObservedEdit, pointDeletionEntry, auditReportEntry } from './audit.js';
 
 const base = { station: 2, pointCode: 'S4', field: 'fs', at: '2026-09-29T10:00:00.000Z', id: 'entry-1' };
 
@@ -22,4 +22,24 @@ test('delete and undo events retain the affected station and source value', () =
   assert.equal(deleted.station, 2);
   assert.equal(deleted.from, restored.to);
   assert.equal(restored.type, 'undo');
+});
+
+test('L3 point deletion records its type and previous reading use for report display', () => {
+  const point = { id: 's1', code: 'S1', type: 'S' };
+  const project = { setups: [], auditLog: [] };
+  const unused = pointDeletionEntry({ ...base, point, project });
+  assert.equal(unused.type, 'delete-point');
+  assert.equal(unused.pointType, 'S');
+  assert.equal(unused.wasObserved, false);
+  project.auditLog.push({ type: 'delete', pointId: 's1', pointCode: 'OLD-S1', field: 'is' });
+  const used = pointDeletionEntry({ ...base, point, project });
+  assert.equal(used.wasObserved, true);
+  assert.equal(auditReportEntry(used).field, '刪除點位');
+  assert.equal(auditReportEntry(used).reason, '既有軌跡記有此點讀數');
+});
+
+test('L3 deleted station snapshots retain evidence of the contained point readings', () => {
+  const entry = pointDeletionEntry({ ...base, point: { id: 's1', code: 'S1', type: 'S' },
+    project: { setups: [], auditLog: [{ type: 'delete', field: 'station', pointCode: 'BM1', from: JSON.stringify([{ intermediate: [{ pointId: 's1', value: '1.2' }] }]) }] } });
+  assert.equal(entry.wasObserved, true);
 });

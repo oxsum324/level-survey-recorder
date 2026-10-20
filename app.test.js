@@ -86,3 +86,12 @@ test('L2 adding or deleting points and saving reading changes invalidate snapsho
     assert.equal(h.run('undoStack.length'), 0, mutation);
   }
 });
+
+test('L3 deleting a previously observed point preserves its identity in the case audit log', () => {
+  const h = caseWithReading();
+  h.click({ removeIs: '0:0' });
+  h.run("deletePoint('s1')");
+  assert.equal(h.run('project.auditLog.at(-1).type'), 'delete-point');
+  assert.equal(h.run('project.auditLog.at(-1).pointCode'), 'S1');
+  assert.equal(h.run('project.auditLog.at(-1).wasObserved'), true);
+});

@@ -16,14 +16,14 @@ export function actionEntry({ id, at, type, station, pointCode, field, from, to,
 }
 
 export function pointDeletionEntry({ id, at, point, project }) {
-  const referenced = setups => setups.some(setup => setup.bsPointId === point.id || setup.fsPointId === point.id ||
-    (setup.intermediate || []).some(sight => sight.pointId === point.id));
+  const referenced = setups => setups.some(setup => (setup.bsPointId === point.id && hasValue(setup.bs)) || (setup.fsPointId === point.id && hasValue(setup.fs)) ||
+    (setup.intermediate || []).some(sight => sight.pointId === point.id && hasValue(sight.value)));
   const wasObserved = referenced(project.setups) || (project.auditLog || []).some(entry => {
     if (!['edit', 'delete', 'undo', 'convert'].includes(entry.type)) return false;
-    if (entry.pointId ? entry.pointId === point.id : entry.pointCode === point.code) return true;
     if (entry.field === 'station') {
-      try { return referenced(JSON.parse(entry.from || '[]')); } catch (_) { return false; }
+      try { return referenced(JSON.parse(entry.from || entry.to || '[]')); } catch (_) { return false; }
     }
+    if (entry.pointId ? entry.pointId === point.id : entry.pointCode === point.code) return hasValue(entry.from) || hasValue(entry.to);
     return false;
   });
   return { id, at, type: 'delete-point', pointId: point.id, pointCode: point.code, pointType: point.type, wasObserved };

@@ -31,7 +31,7 @@ test('L3 point deletion records its type and previous reading use for report dis
   assert.equal(unused.type, 'delete-point');
   assert.equal(unused.pointType, 'S');
   assert.equal(unused.wasObserved, false);
-  project.auditLog.push({ type: 'delete', pointId: 's1', pointCode: 'OLD-S1', field: 'is' });
+  project.auditLog.push({ type: 'delete', pointId: 's1', pointCode: 'OLD-S1', field: 'is', from: '0.500' });
   const used = pointDeletionEntry({ ...base, point, project });
   assert.equal(used.wasObserved, true);
   assert.equal(auditReportEntry(used).field, '刪除點位');
@@ -42,4 +42,10 @@ test('L3 deleted station snapshots retain evidence of the contained point readin
   const entry = pointDeletionEntry({ ...base, point: { id: 's1', code: 'S1', type: 'S' },
     project: { setups: [], auditLog: [{ type: 'delete', field: 'station', pointCode: 'BM1', from: JSON.stringify([{ intermediate: [{ pointId: 's1', value: '1.2' }] }]) }] } });
   assert.equal(entry.wasObserved, true);
+});
+
+test('L3 an empty placeholder does not assert a historical reading', () => {
+  const entry = pointDeletionEntry({ ...base, point: { id: 's1', code: 'S1', type: 'S' },
+    project: { setups: [], auditLog: [{ type: 'delete', field: 'is', pointCode: 'S1', pointId: 's1', from: '', to: '' }] } });
+  assert.equal(entry.wasObserved, false);
 });

@@ -6,6 +6,7 @@ import * as audit from '../audit.js';
 import * as integrity from '../integrity.js';
 import * as exif from '../exif.js';
 import * as observation from '../observation.js';
+import * as pdfPages from '../pdf-pages.js';
 
 // Execute the real application handlers with a small DOM and storage boundary.
 export function appHarness(overrides = {}) {
@@ -19,7 +20,7 @@ export function appHarness(overrides = {}) {
     return nodes.get(selector);
   };
   const context = vm.createContext({
-    ...calc, ...store, ...audit, ...integrity, ...exif, ...observation,
+    ...calc, ...store, ...audit, ...integrity, ...exif, ...observation, ...pdfPages,
     crypto, Blob, File, URL, Date, structuredClone, TextEncoder,
     setTimeout: () => 1, clearTimeout() {}, confirm: () => true,
     document: {

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { parseBackup, makeBackup, estimateBackupSize } from './store.js';
 
 const image = `data:image/png;base64,${Buffer.from('equipment-photo').toString('base64')}`;
@@ -74,4 +75,15 @@ test('L8 estimation includes base64 expansion and missing media fails before exp
   const target = { ...project, equipmentPhotos: [{ mediaId: 'large' }] };
   assert.ok(await estimateBackupSize(target, { load: async () => ({ size: 80 * 1024 * 1024, type: 'image/jpeg' }) }) > 100 * 1024 * 1024);
   await assert.rejects(makeBackup(target, { load: async () => null }), /無法建立完整案件檔/);
+});
+
+const historicalCases = JSON.parse(readFileSync(new URL('./checks/fixtures/legacy-cases.json', import.meta.url), 'utf8'));
+for (const { version, backup } of historicalCases) test(`historical V${version} defaults with original BS/FS/IS values remain importable`, () => {
+  const restored = parseBackup(JSON.stringify(backup));
+  assert.equal(restored.project.schema, 1);
+  assert.deepEqual(restored.project.setups, backup.project.setups);
+  assert.equal(restored.project.setups[0].bs, '1.000');
+  assert.equal(restored.project.setups[0].fs, '1.000');
+  assert.equal(restored.project.setups[0].intermediate[0].value, '0.500');
+  assert.equal(restored.project.setups[0].bsAt, undefined);
 });

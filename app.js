@@ -4,6 +4,7 @@ import { resolveObservedEdit, actionEntry, pointDeletionEntry, auditReportEntry 
 import { fingerprint, sha256Blob } from './integrity.js';
 import { captureTime } from './exif.js';
 import { setFirstObservedAt } from './observation.js';
+import { renderPagedPdf } from './pdf-pages.js';
 
 const $ = selector => document.querySelector(selector);
 const uid = () => crypto.randomUUID();
@@ -1609,7 +1610,7 @@ async function preparePdf(report, buildId) {
       try { return [...sheet.cssRules].map(rule => rule.cssText).join('\n'); }
       catch (_) { return ''; }
     }).join('\n');
-    const blob = await window.html2pdf().set({
+    const blob = await renderPagedPdf(report, {
       margin: 15,
       image: { type: 'jpeg', quality: 0.96 },
       html2canvas: { scale: 2, useCORS: false, scrollY: 0, logging: false, onclone: cloned => {
@@ -1619,7 +1620,9 @@ async function preparePdf(report, buildId) {
       } },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'] },
-    }).from(report).outputPdf('blob');
+    }, { isCurrent: () => buildId === previewBuildId, onProgress: (page, pages) => {
+      if (buildId === previewBuildId) $('#pdfStatus').textContent = `正在建立 PDF：第 ${page}／${pages} 頁…`;
+    } });
     if (buildId !== previewBuildId) return;
     if (!(blob instanceof Blob) || blob.size < 1000) throw new Error('產出的檔案內容不完整');
     for (let index = 0; index < 10 && document.querySelectorAll('#printPanel').length > 1; index++) await new Promise(resolve => setTimeout(resolve, 50));

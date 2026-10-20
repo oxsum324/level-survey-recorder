@@ -18,7 +18,7 @@ async page => {
   });
   const started = Date.now();
   await page.goto('http://127.0.0.1:4192/?release=0.7.0&check=slow', { waitUntil: 'domcontentloaded', timeout: 4000 });
-  await page.waitForFunction(() => document.querySelector('#saveState').textContent.includes('已載入'), { timeout: 4000 });
+  await page.waitForFunction(() => document.querySelector('#saveState').textContent.includes('已載入'), null, { timeout: Math.max(1, 4000 - (Date.now() - started)) });
   const elapsedMs = Date.now() - started;
   await page.getByRole('button', { name: '② 觀測讀數' }).click();
   await page.waitForSelector('#addStation', { state: 'visible' });

@@ -37,6 +37,7 @@ test('L7 installation reloads all assets instead of trusting the HTTP cache', as
   await install;
   assert.ok(h.installed.length > 10);
   assert.ok(h.installed.every(request => request.cache === 'reload'));
+  assert.ok(h.installed.some(request => request.url.endsWith('/pdf-pages.js')));
 });
 
 test('L7 a timed-out navigation serves cached content and its late response still updates the cache', async () => {

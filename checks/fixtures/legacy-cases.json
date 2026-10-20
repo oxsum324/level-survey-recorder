@@ -1,0 +1,1208 @@
+[
+  {
+    "version": "0.1.0",
+    "sourceCommit": "59193332e445b58647b6fc5b8876907540b7e9f3",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.1.0",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "instrument": "",
+        "datum": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "endHeight": "",
+          "toleranceMm": "",
+          "adjustMethod": "stations"
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "updatedAt": "2026-10-20T00:00:00.000Z"
+      },
+      "media": []
+    }
+  },
+  {
+    "version": "0.2.0",
+    "sourceCommit": "c7f5e7ce62e54c33eb9efd21e8a977f6fc273b4d",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.2.0",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "instrument": "PENTAX AP-128",
+        "instrumentDefaultApplied": true,
+        "datum": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "equipmentPhotos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "endHeight": "",
+          "toleranceMm": "",
+          "adjustMethod": "stations"
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "updatedAt": "2026-10-20T00:00:00.000Z"
+      },
+      "media": []
+    }
+  },
+  {
+    "version": "0.3.0",
+    "sourceCommit": "2ad40e298235870b350253ed3eb34679522368e2",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.3.0",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "instrument": "PENTAX AP-128",
+        "instrumentDefaultApplied": true,
+        "datum": "",
+        "approxLocation": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "equipmentPhotos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "endHeight": "",
+          "toleranceMm": "",
+          "adjustMethod": "stations"
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "updatedAt": "2026-10-20T00:00:00.000Z"
+      },
+      "media": []
+    }
+  },
+  {
+    "version": "0.4.0",
+    "sourceCommit": "29b2dd3e7b2dea644c3bef065595e83e5b43b613",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.4.0",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "rodHolder": "",
+        "photographer": "",
+        "instrument": "PENTAX AP-128",
+        "instrumentDefaultApplied": true,
+        "datum": "",
+        "approxLocation": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "equipmentPhotos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "startHeightKind": "assumed",
+          "endHeight": "",
+          "toleranceMm": "",
+          "adjustMethod": "stations"
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "updatedAt": "2026-10-20T00:00:00.000Z"
+      },
+      "media": []
+    }
+  },
+  {
+    "version": "0.4.1",
+    "sourceCommit": "700eb94abac6ba13b3d251fb0f5c6ec649aec011",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.4.1",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "rodHolder": "",
+        "photographer": "",
+        "instrument": "PENTAX AP-128",
+        "instrumentDefaultApplied": true,
+        "datum": "",
+        "approxLocation": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "equipmentPhotos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "startHeightKind": "assumed",
+          "endHeight": "",
+          "toleranceMm": "",
+          "adjustMethod": "stations"
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "updatedAt": "2026-10-20T00:00:00.000Z"
+      },
+      "media": []
+    }
+  },
+  {
+    "version": "0.4.2",
+    "sourceCommit": "6eedb93eaf1a04100a5d56a1de67379179d212dc",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.4.2",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "rodHolder": "",
+        "photographer": "",
+        "instrument": "PENTAX AP-128",
+        "instrumentDefaultApplied": true,
+        "datum": "",
+        "approxLocation": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "equipmentPhotos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "startHeightKind": "assumed",
+          "endHeight": "",
+          "toleranceMm": "",
+          "adjustMethod": "stations"
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "updatedAt": "2026-10-20T00:00:00.000Z"
+      },
+      "media": []
+    }
+  },
+  {
+    "version": "0.4.3",
+    "sourceCommit": "2242761aa3304edb1bda504c65bf3a6d74515c4c",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.4.3",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "rodHolder": "",
+        "photographer": "",
+        "instrument": "PENTAX AP-128",
+        "instrumentDefaultApplied": true,
+        "datum": "",
+        "approxLocation": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "pointPlan": {
+          "sCount": "0",
+          "tpCount": "0"
+        },
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "equipmentPhotos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "startHeightKind": "assumed",
+          "endHeight": "",
+          "toleranceMm": "",
+          "adjustMethod": "stations"
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "updatedAt": "2026-10-20T00:00:00.000Z"
+      },
+      "media": []
+    }
+  },
+  {
+    "version": "0.4.4",
+    "sourceCommit": "13e10bfee30e2ca20983a9d7b304cf9de94fc137",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.4.4",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "rodHolder": "",
+        "photographer": "",
+        "instrument": "PENTAX AP-128",
+        "instrumentDefaultApplied": true,
+        "datum": "",
+        "approxLocation": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "pointPlan": {
+          "sCount": "0",
+          "tpCount": "0"
+        },
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "equipmentPhotos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "startHeightKind": "assumed",
+          "endHeight": "",
+          "toleranceMm": "",
+          "staffLengthM": "5",
+          "adjustMethod": "stations"
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "updatedAt": "2026-10-20T00:00:00.000Z"
+      },
+      "media": []
+    }
+  },
+  {
+    "version": "0.5.0",
+    "sourceCommit": "ca1f8ab9c333013c8cb5982494523b8869bde347",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.5.0",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "rodHolder": "",
+        "photographer": "",
+        "instrument": "PENTAX AP-128",
+        "instrumentDefaultApplied": true,
+        "datum": "",
+        "approxLocation": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "pointPlan": {
+          "sCount": "0",
+          "tpCount": "0"
+        },
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "equipmentPhotos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "startHeightKind": "assumed",
+          "endHeight": "",
+          "toleranceMm": "",
+          "toleranceBasis": "",
+          "formulaC": "",
+          "staffLengthM": "5",
+          "stadiaConstantK": "100",
+          "threeWireToleranceMm": "",
+          "adjustMethod": "stations"
+        },
+        "instrumentCheck": {
+          "serial": "",
+          "calibrationDate": "",
+          "calibrationAgency": "",
+          "twoPeg": {
+            "a1": "",
+            "b1": "",
+            "a2": "",
+            "b2": "",
+            "distanceM": ""
+          }
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "updatedAt": "2026-10-20T00:00:00.000Z"
+      },
+      "media": []
+    }
+  },
+  {
+    "version": "0.6.0",
+    "sourceCommit": "5f212c1494abd1d936ec96f949156a7db433996a",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.6.0",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "rodHolder": "",
+        "photographer": "",
+        "instrument": "PENTAX AP-128",
+        "instrumentDefaultApplied": true,
+        "datum": "",
+        "approxLocation": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "pointPlan": {
+          "sCount": "0",
+          "tpCount": "0"
+        },
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "equipmentPhotos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "startHeightKind": "assumed",
+          "endHeight": "",
+          "toleranceMm": "",
+          "toleranceBasis": "",
+          "formulaC": "",
+          "staffLengthM": "5",
+          "stadiaConstantK": "100",
+          "threeWireToleranceMm": "",
+          "adjustMethod": "stations"
+        },
+        "instrumentCheck": {
+          "serial": "",
+          "calibrationDate": "",
+          "calibrationAgency": "",
+          "twoPeg": {
+            "a1": "",
+            "b1": "",
+            "a2": "",
+            "b2": "",
+            "distanceM": ""
+          }
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "auditLog": [],
+        "environment": {
+          "weather": "",
+          "weatherOther": "",
+          "temperature": "",
+          "start": "",
+          "end": "",
+          "notes": ""
+        },
+        "checklist": {
+          "items": [
+            {
+              "label": "圓水準器（氣泡）檢查",
+              "status": ""
+            },
+            {
+              "label": "兩樁法檢驗",
+              "status": ""
+            },
+            {
+              "label": "水準尺零點、接頭與刻劃檢查",
+              "status": ""
+            },
+            {
+              "label": "尺墊準備（轉點使用）",
+              "status": ""
+            },
+            {
+              "label": "前後視距大致相等的站位規劃",
+              "status": ""
+            },
+            {
+              "label": "避開熱閃爍明顯的時段",
+              "status": ""
+            },
+            {
+              "label": "視線不要貼近地面",
+              "status": ""
+            },
+            {
+              "label": "扶尺人員前後擺尺，取最小讀數",
+              "status": ""
+            },
+            {
+              "label": "使用兩支尺時，測站數取偶數",
+              "status": ""
+            }
+          ],
+          "notes": ""
+        },
+        "updatedAt": "2026-10-20T00:00:00.000Z",
+        "lastModifiedAt": "2026-10-20T00:00:00.000Z",
+        "lastExportedAt": ""
+      },
+      "media": []
+    }
+  },
+  {
+    "version": "0.6.1",
+    "sourceCommit": "9f79ed0aa4a7d08e660b4ef7450f87c8b9286823",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.6.1",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "rodHolder": "",
+        "photographer": "",
+        "instrument": "PENTAX AP-128",
+        "instrumentDefaultApplied": true,
+        "datum": "",
+        "approxLocation": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "pointPlan": {
+          "sCount": "0",
+          "tpCount": "0"
+        },
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "equipmentPhotos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "startHeightKind": "assumed",
+          "endHeight": "",
+          "toleranceMm": "",
+          "toleranceBasis": "",
+          "formulaC": "",
+          "staffLengthM": "5",
+          "stadiaConstantK": "100",
+          "threeWireToleranceMm": "",
+          "adjustMethod": "stations"
+        },
+        "instrumentCheck": {
+          "serial": "",
+          "calibrationDate": "",
+          "calibrationAgency": "",
+          "twoPeg": {
+            "a1": "",
+            "b1": "",
+            "a2": "",
+            "b2": "",
+            "distanceM": ""
+          }
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "auditLog": [],
+        "environment": {
+          "weather": "",
+          "weatherOther": "",
+          "temperature": "",
+          "start": "",
+          "end": "",
+          "notes": ""
+        },
+        "checklist": {
+          "items": [
+            {
+              "label": "圓水準器（氣泡）檢查",
+              "status": ""
+            },
+            {
+              "label": "兩樁法檢驗",
+              "status": ""
+            },
+            {
+              "label": "水準尺零點、接頭與刻劃檢查",
+              "status": ""
+            },
+            {
+              "label": "尺墊準備（轉點使用）",
+              "status": ""
+            },
+            {
+              "label": "前後視距大致相等的站位規劃",
+              "status": ""
+            },
+            {
+              "label": "避開熱閃爍明顯的時段",
+              "status": ""
+            },
+            {
+              "label": "視線不要貼近地面",
+              "status": ""
+            },
+            {
+              "label": "扶尺人員前後擺尺，取最小讀數",
+              "status": ""
+            },
+            {
+              "label": "使用兩支尺時，測站數取偶數",
+              "status": ""
+            }
+          ],
+          "notes": ""
+        },
+        "updatedAt": "2026-10-20T00:00:00.000Z",
+        "lastModifiedAt": "2026-10-20T00:00:00.000Z",
+        "lastExportedAt": ""
+      },
+      "media": []
+    }
+  },
+  {
+    "version": "0.6.2",
+    "sourceCommit": "7109c99a21f82d8b061fa74c3b927dbf2ca835ab",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.6.2",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "rodHolder": "",
+        "photographer": "",
+        "instrument": "PENTAX AP-128",
+        "instrumentDefaultApplied": true,
+        "datum": "",
+        "approxLocation": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "pointPlan": {
+          "sCount": "0",
+          "tpCount": "0"
+        },
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "equipmentPhotos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "startHeightKind": "assumed",
+          "endHeight": "",
+          "toleranceMm": "",
+          "toleranceBasis": "",
+          "formulaC": "",
+          "staffLengthM": "5",
+          "stadiaConstantK": "100",
+          "threeWireToleranceMm": "",
+          "adjustMethod": "stations"
+        },
+        "instrumentCheck": {
+          "serial": "",
+          "calibrationDate": "",
+          "calibrationAgency": "",
+          "twoPeg": {
+            "a1": "",
+            "b1": "",
+            "a2": "",
+            "b2": "",
+            "distanceM": ""
+          }
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "auditLog": [],
+        "environment": {
+          "weather": "",
+          "weatherOther": "",
+          "temperature": "",
+          "start": "",
+          "end": "",
+          "notes": ""
+        },
+        "checklist": {
+          "items": [
+            {
+              "label": "圓水準器（氣泡）檢查",
+              "status": ""
+            },
+            {
+              "label": "兩樁法檢驗",
+              "status": ""
+            },
+            {
+              "label": "水準尺零點、接頭與刻劃檢查",
+              "status": ""
+            },
+            {
+              "label": "尺墊準備（轉點使用）",
+              "status": ""
+            },
+            {
+              "label": "前後視距大致相等的站位規劃",
+              "status": ""
+            },
+            {
+              "label": "避開熱閃爍明顯的時段",
+              "status": ""
+            },
+            {
+              "label": "視線不要貼近地面",
+              "status": ""
+            },
+            {
+              "label": "扶尺人員前後擺尺，取最小讀數",
+              "status": ""
+            },
+            {
+              "label": "使用兩支尺時，測站數取偶數",
+              "status": ""
+            }
+          ],
+          "notes": ""
+        },
+        "updatedAt": "2026-10-20T00:00:00.000Z",
+        "lastModifiedAt": "2026-10-20T00:00:00.000Z",
+        "lastExportedAt": ""
+      },
+      "media": []
+    }
+  },
+  {
+    "version": "0.6.3",
+    "sourceCommit": "7badfd951a65c561be4ae0e39ab0d1d4f624640e",
+    "backup": {
+      "format": "level-survey-case.v1",
+      "exportedAt": "2026-10-20T00:00:00.000Z",
+      "project": {
+        "schema": 1,
+        "appVersion": "0.6.3",
+        "id": "fixture-2",
+        "name": "",
+        "number": "",
+        "date": "2026-10-20",
+        "observer": "",
+        "rodHolder": "",
+        "photographer": "",
+        "instrument": "PENTAX AP-128",
+        "instrumentDefaultApplied": true,
+        "datum": "",
+        "approxLocation": "",
+        "points": [
+          {
+            "id": "fixture-1",
+            "code": "BM1",
+            "type": "BM",
+            "description": "",
+            "position": null
+          },
+          {
+            "id": "legacy-s1",
+            "code": "S1",
+            "type": "S",
+            "description": ""
+          }
+        ],
+        "pointPlan": {
+          "sCount": "0",
+          "tpCount": "0"
+        },
+        "mapMediaId": null,
+        "mapSource": "",
+        "photos": [],
+        "equipmentPhotos": [],
+        "route": {
+          "startId": "fixture-1",
+          "endId": "fixture-1",
+          "startHeight": "10.000",
+          "startHeightKind": "assumed",
+          "endHeight": "",
+          "toleranceMm": "",
+          "toleranceBasis": "",
+          "formulaC": "",
+          "staffLengthM": "5",
+          "stadiaConstantK": "100",
+          "threeWireToleranceMm": "",
+          "adjustMethod": "stations"
+        },
+        "instrumentCheck": {
+          "serial": "",
+          "calibrationDate": "",
+          "calibrationAgency": "",
+          "twoPeg": {
+            "a1": "",
+            "b1": "",
+            "a2": "",
+            "b2": "",
+            "distanceM": ""
+          }
+        },
+        "setups": [
+          {
+            "bsPointId": "fixture-1",
+            "bs": "1.000",
+            "intermediate": [
+              {
+                "pointId": "legacy-s1",
+                "value": "0.500"
+              }
+            ],
+            "fsPointId": "fixture-1",
+            "fs": "1.000",
+            "distance": ""
+          }
+        ],
+        "routeHistory": [],
+        "auditLog": [],
+        "environment": {
+          "weather": "",
+          "weatherOther": "",
+          "temperature": "",
+          "start": "",
+          "end": "",
+          "notes": ""
+        },
+        "checklist": {
+          "items": [
+            {
+              "label": "圓水準器（氣泡）檢查",
+              "status": ""
+            },
+            {
+              "label": "兩樁法檢驗",
+              "status": ""
+            },
+            {
+              "label": "水準尺零點、接頭與刻劃檢查",
+              "status": ""
+            },
+            {
+              "label": "尺墊準備（轉點使用）",
+              "status": ""
+            },
+            {
+              "label": "前後視距大致相等的站位規劃",
+              "status": ""
+            },
+            {
+              "label": "避開熱閃爍明顯的時段",
+              "status": ""
+            },
+            {
+              "label": "視線不要貼近地面",
+              "status": ""
+            },
+            {
+              "label": "扶尺人員前後擺尺，取最小讀數",
+              "status": ""
+            },
+            {
+              "label": "使用兩支尺時，測站數取偶數",
+              "status": ""
+            }
+          ],
+          "notes": ""
+        },
+        "updatedAt": "2026-10-20T00:00:00.000Z",
+        "lastModifiedAt": "2026-10-20T00:00:00.000Z",
+        "lastExportedAt": ""
+      },
+      "media": []
+    }
+  }
+]

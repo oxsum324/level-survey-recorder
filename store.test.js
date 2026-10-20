@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseBackup } from './store.js';
+import { parseBackup, makeBackup, estimateBackupSize } from './store.js';
 
 const image = `data:image/png;base64,${Buffer.from('equipment-photo').toString('base64')}`;
 const project = {
@@ -49,4 +49,29 @@ test('L5 schema 2 and missing schema are rejected before a case can be replaced'
     assert.throws(() => parseBackup(JSON.stringify({ format: 'level-survey-case.v1', project: { ...project, schema }, media: [] })),
       new RegExp(`此案件檔格式（schema ${String(schema)}）不受 V[0-9.]+ 支援`));
   }
+});
+
+test('L8 segmented output has the same parsed meaning as the original writer and can be imported', async () => {
+  const target = { ...project, name: '中文案件', mapMediaId: 'map', photos: [{ mediaId: 'photo' }, { mediaId: 'map' }], equipmentPhotos: [{ mediaId: 'equipment' }] };
+  const media = new Map(['map', 'photo', 'equipment'].map(id => [id, new Blob([id], { type: 'image/jpeg' })]));
+  const dataUrl = async blob => `data:${blob.type};base64,${Buffer.from(await blob.arrayBuffer()).toString('base64')}`;
+  const load = async id => media.get(id);
+  const exportedAt = '2026-10-20T00:00:00.000Z';
+  const originalMedia = [];
+  for (const [id, blob] of media) originalMedia.push({ id, dataUrl: await dataUrl(blob) });
+  const original = JSON.parse(JSON.stringify({ format: 'level-survey-case.v1', exportedAt, project: target, media: originalMedia }));
+  let estimated;
+  const blob = await makeBackup(target, { load, dataUrl, exportedAt, onEstimate: bytes => estimated = bytes });
+  assert.deepEqual(JSON.parse(await blob.text()), original);
+  assert.equal(blob.size, estimated);
+  assert.equal(await estimateBackupSize(target, { load, exportedAt }), blob.size);
+  const restored = parseBackup(await blob.text());
+  assert.equal(restored.media.length, 3);
+  assert.equal(await restored.media[1].blob.text(), 'photo');
+});
+
+test('L8 estimation includes base64 expansion and missing media fails before export', async () => {
+  const target = { ...project, equipmentPhotos: [{ mediaId: 'large' }] };
+  assert.ok(await estimateBackupSize(target, { load: async () => ({ size: 80 * 1024 * 1024, type: 'image/jpeg' }) }) > 100 * 1024 * 1024);
+  await assert.rejects(makeBackup(target, { load: async () => null }), /無法建立完整案件檔/);
 });

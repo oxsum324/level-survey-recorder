@@ -870,9 +870,9 @@ async function exportBackup(share = false) {
   let delivered = false;
   try {
     target.lastExportedAt = exportedAt;
-    const backup = await makeBackup(structuredClone(target));
+    const backup = await makeBackup(structuredClone(target), { onEstimate: showBackupEstimate });
     const name = `${(project.number || project.name || '水準測量').replace(/[\\/:*?"<>|]/g, '_')}_水準測量案件_${new Date().toISOString().slice(0, 10)}.json`;
-    if (!await deliverFile(name, new Blob([JSON.stringify(backup)], { type: 'application/json' }), share)) return false;
+    if (!await deliverFile(name, backup, share)) return false;
     delivered = true;
     if (project === target) queueSave(true, false);
     notify(share ? '完整案件檔已分享。' : '完整案件檔已下載；請在目標資料夾核對檔案。');
@@ -884,6 +884,16 @@ async function exportBackup(share = false) {
       if (project === target) queueSave(true, false);
     }
   }
+}
+
+function showBackupEstimate(bytes) {
+  const text = bytes > 100 * 1024 * 1024
+    ? `檔案約 ${(bytes / 1024 / 1024).toFixed(1)} MB，手機匯出可能較久或失敗，可改在電腦匯出` : '';
+  for (const id of ['backupSizeNotice', 'backupSizeNotice2']) {
+    $(`#${id}`).textContent = text;
+    $(`#${id}`).hidden = !text;
+  }
+  if (text) notify(text);
 }
 
 function hasCaseRecords() {
@@ -930,10 +940,10 @@ async function exportPhotoWork(kind, share = false) {
       workProject.photos = [];
       workProject.equipmentPhotos = [];
     }
-    const backup = await makeBackup(workProject);
+    const backup = await makeBackup(workProject, { onEstimate: showBackupEstimate });
     const label = kind === 'task' ? '攝影工作檔' : '攝影成果';
     const name = `${(project.number || project.name || '水準測量').replace(/[\\/:*?"<>|]/g, '_')}_${label}_${new Date().toISOString().slice(0, 10)}.json`;
-    if (!await deliverFile(name, new Blob([JSON.stringify(backup)], { type: 'application/json' }), share)) return;
+    if (!await deliverFile(name, backup, share)) return;
     notify(`${label}已${share ? '分享' : '下載'}；請將此檔交給另一位作業者。`);
   } catch (error) { notify(`匯出失敗：${error.message}`, true); }
 }

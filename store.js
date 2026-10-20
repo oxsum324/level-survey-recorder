@@ -69,15 +69,32 @@ function blobAsDataUrl(blob) {
   });
 }
 
-export async function makeBackup(project) {
-  const ids = new Set([project.mapMediaId, ...(project.photos || []).map(photo => photo.mediaId), ...(project.equipmentPhotos || []).map(photo => photo.mediaId)].filter(Boolean));
-  const media = [];
-  for (const id of ids) {
-    const blob = await loadMedia(id);
+const mediaIds = project => [...new Set([project.mapMediaId, ...(project.photos || []).map(photo => photo.mediaId), ...(project.equipmentPhotos || []).map(photo => photo.mediaId)].filter(Boolean))];
+const backupHeader = (project, exportedAt) => JSON.stringify({ format: 'level-survey-case.v1', exportedAt, project }).slice(0, -1) + ',"media":[';
+
+export async function estimateBackupSize(project, { load = loadMedia, exportedAt = new Date().toISOString() } = {}) {
+  const ids = mediaIds(project);
+  let bytes = new Blob([backupHeader(project, exportedAt), ']}']).size;
+  for (const [index, id] of ids.entries()) {
+    const blob = await load(id);
     if (!blob) throw new Error(`媒體 ${id} 不在此裝置，無法建立完整案件檔。`);
-    media.push({ id, dataUrl: await blobAsDataUrl(blob) });
+    const prefix = `data:${blob.type || 'application/octet-stream'};base64,`;
+    bytes += new Blob([index ? ',' : '', JSON.stringify({ id, dataUrl: prefix })]).size + 4 * Math.ceil(blob.size / 3);
   }
-  return { format: 'level-survey-case.v1', exportedAt: new Date().toISOString(), project, media };
+  return bytes;
+}
+
+export async function makeBackup(project, { load = loadMedia, dataUrl = blobAsDataUrl, exportedAt = new Date().toISOString(), onEstimate = () => {} } = {}) {
+  onEstimate(await estimateBackupSize(project, { load, exportedAt }));
+  const parts = [new Blob([backupHeader(project, exportedAt)])];
+  for (const [index, id] of mediaIds(project).entries()) {
+    const blob = await load(id);
+    if (!blob) throw new Error(`媒體 ${id} 不在此裝置，無法建立完整案件檔。`);
+    // Convert each entry to bytes immediately so parts do not retain all base64 strings.
+    parts.push(new Blob([index ? ',' : '', JSON.stringify({ id, dataUrl: await dataUrl(blob) })]));
+  }
+  parts.push(new Blob([']}']));
+  return new Blob(parts, { type: 'application/json' });
 }
 
 export function parseBackup(contents) {

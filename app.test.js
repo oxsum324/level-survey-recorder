@@ -98,7 +98,7 @@ test('L3 deleting a previously observed point preserves its identity in the case
 
 test('L4 exported snapshots contain the successful export time and reopen as exported', async () => {
   const h = caseWithReading();
-  h.run(`makeBackup = async snapshot => ({ format: 'level-survey-case.v1', project: snapshot, media: [] });
+  h.run(`makeBackup = async snapshot => new Blob([JSON.stringify({ format: 'level-survey-case.v1', project: snapshot, media: [] })]);
     deliverFile = async (name, blob) => { globalThis.deliveredBackup = await blob.text(); return true; };`);
   assert.equal(await h.run('exportBackup()'), true);
   const exportedAt = h.run('project.lastExportedAt');
@@ -113,7 +113,7 @@ test('L4 failed or cancelled delivery restores the previous export marker', asyn
   for (const delivery of ['return false', "throw new Error('下載失敗')"]) {
     const h = caseWithReading();
     h.run(`project.lastExportedAt = '2026-01-01T00:00:00.000Z';
-      makeBackup = async snapshot => ({ project: snapshot });
+      makeBackup = async snapshot => new Blob([JSON.stringify({ project: snapshot })]);
       deliverFile = async () => { ${delivery}; };`);
     assert.equal(await h.run('exportBackup(true)'), false);
     assert.equal(h.run('project.lastExportedAt'), '2026-01-01T00:00:00.000Z');
@@ -152,4 +152,15 @@ test('L6 blocked localStorage keeps case startup, preferences and observation av
   assert.doesNotThrow(() => h.node('#wakeLockToggle').onchange());
   h.node('#addStation').onclick();
   assert.equal(h.run('project.setups.length'), 1);
+});
+
+test('L8 the size notice is informational and successful delivery still completes', async () => {
+  const h = caseWithReading();
+  h.run(`makeBackup = async (snapshot, options) => { options.onEstimate(150 * 1024 * 1024); return new Blob(['case']); };
+    deliverFile = async () => true;`);
+  assert.equal(await h.run('exportBackup()'), true);
+  assert.match(h.node('#backupSizeNotice').textContent, /約 150.0 MB/);
+  assert.equal(h.node('#backupSizeNotice').hidden, false);
+  h.run('showBackupEstimate(1000)');
+  assert.equal(h.node('#backupSizeNotice').hidden, true);
 });

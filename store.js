@@ -1,3 +1,5 @@
+import { VERSION } from './calc.js';
+
 const DB_NAME = 'level-survey-v1';
 const DB_VERSION = 1;
 
@@ -84,6 +86,7 @@ export function parseBackup(contents) {
     throw new Error('不是此版水準測量案件檔。');
   }
   const project = backup.project;
+  if (project.schema !== 1) throw new Error(`此案件檔格式（schema ${String(project.schema)}）不受 V${VERSION} 支援`);
   if (!Array.isArray(project.points) || !Array.isArray(project.setups) || !Array.isArray(project.photos) || (project.equipmentPhotos !== undefined && !Array.isArray(project.equipmentPhotos)) || !project.route) {
     throw new Error('案件資料結構不完整。');
   }

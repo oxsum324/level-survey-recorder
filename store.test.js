@@ -4,6 +4,7 @@ import { parseBackup } from './store.js';
 
 const image = `data:image/png;base64,${Buffer.from('equipment-photo').toString('base64')}`;
 const project = {
+  schema: 1,
   points: [{ id: 'bm1', code: 'BM1', type: 'BM' }],
   setups: [], photos: [], equipmentPhotos: [{ id: 'photo-1', mediaId: 'media-1', instrument: 'PENTAX AP-128' }],
   route: { startId: 'bm1', endId: 'bm1' },
@@ -41,4 +42,11 @@ for (const version of ['0.4.3', '0.5.0']) test(`V${version} backup keeps origina
   assert.equal(restored.project.setups[0].intermediate[0].value, '0.500');
   assert.equal(restored.project.auditLog, undefined);
   assert.equal(restored.project.setups[0].bsAt, undefined);
+});
+
+test('L5 schema 2 and missing schema are rejected before a case can be replaced', () => {
+  for (const schema of [2, undefined, null, '1']) {
+    assert.throws(() => parseBackup(JSON.stringify({ format: 'level-survey-case.v1', project: { ...project, schema }, media: [] })),
+      new RegExp(`此案件檔格式（schema ${String(schema)}）不受 V[0-9.]+ 支援`));
+  }
 });

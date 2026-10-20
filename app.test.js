@@ -119,3 +119,18 @@ test('L4 failed or cancelled delivery restores the previous export marker', asyn
     assert.equal(h.run('project.lastExportedAt'), '2026-01-01T00:00:00.000Z');
   }
 });
+
+test('L5 an unsupported import leaves the active case and its undo snapshot intact', async () => {
+  let replacements = 0;
+  const h = caseWithReading();
+  h.context.replaceProject = async () => { replacements++; };
+  h.click({ removeIs: '0:0' });
+  const before = h.run('JSON.stringify(project)');
+  const incoming = JSON.parse(before); incoming.schema = 2;
+  h.context.importFile = { text: async () => JSON.stringify({ format: 'level-survey-case.v1', project: incoming, media: [] }) };
+  await h.run('importBackup(importFile)');
+  assert.equal(replacements, 0);
+  assert.equal(h.run('JSON.stringify(project)'), before);
+  assert.equal(h.node('#undoLast').disabled, false);
+  assert.match(h.messages.at(-1), /schema 2/);
+});

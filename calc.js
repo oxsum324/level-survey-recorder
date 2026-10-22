@@ -1,4 +1,4 @@
-export const VERSION = '0.7.2';
+export const VERSION = '0.7.3';
 
 function numberOf(value) {
   const text = String(value ?? '').trim().replace(',', '.');

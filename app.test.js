@@ -233,3 +233,15 @@ test('M2 opening the correction dialog places focus on its reason selector', () 
   assert.equal(focused, true);
   assert.equal(h.node('#editReasonContext').textContent, '第 1 站 BM1 點 ‧ 後視：1.500 m → 1.417 m');
 });
+
+
+test('M1 malformed next-reading input still invalidates the previous destructive undo', async () => {
+  const h = formatCase();
+  h.run("pushUndo('移除讀數', 1, 'S1', 'value', '0.500', '')");
+  const target = readingTarget({ reading: '' }, '1.5001.500'); target.id = 'nextReading';
+  const before = h.run('JSON.stringify(project)');
+  await h.dispatch('input', target);
+  assert.equal(h.node('#undoLast').disabled, true);
+  assert.equal(h.run('JSON.stringify(project)'), before);
+  assert.equal(target.warning.hidden, false);
+});

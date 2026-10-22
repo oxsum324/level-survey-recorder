@@ -10,7 +10,7 @@ const $ = selector => document.querySelector(selector);
 const uid = () => crypto.randomUUID();
 const safe = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const validPosition = value => value && Number.isFinite(value.x) && Number.isFinite(value.y) && value.x >= 0 && value.x <= 100 && value.y >= 0 && value.y <= 100;
-const decimals = 'type="text" inputmode="decimal" autocomplete="off"';
+const decimals = 'type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off"';
 const validReading = value => /^\d+(?:[.,]\d{1,5})?$/.test(String(value ?? '').trim());
 const DEFAULT_INSTRUMENT = 'PENTAX AP-128';
 const photoUrls = new Map();
@@ -79,6 +79,7 @@ function code(id) { return point(id)?.code || '未指定'; }
 function notify(message, danger = false) {
   const inline = !$('#measurePanel')?.hidden ? $('#measureNotice') : null;
   const box = inline || $('#message');
+  box.setAttribute('aria-live', danger ? 'assertive' : 'polite');
   box.textContent = message;
   box.className = danger ? 'danger' : '';
   box.hidden = false;
@@ -539,7 +540,7 @@ function renderStations() {
       <div class="bs-entry reading-value"><label>後視 BS · ${safe(code(setup.bsPointId))}<input ${decimals} data-reading data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="bsInverted" data-station="${index}" ${setup.bsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(setup.bsPointId), 'bs')}${correctionNote(index + 1, code(setup.bsPointId), 'bsInverted')}</div>
       ${wireFields(setup, index, 'bs')}
       ${waitingForNext ? `<div class="next-reading"><div class="next-point-label">下一點</div><div class="next-point-line"><button type="button" data-cycle-point="-1" aria-label="前一個點位">‹</button><button type="button" id="nextPointPicker" aria-haspopup="dialog">${safe(code(draftNextPointId))} · ${observedPointIds().has(draftNextPointId) ? '已觀測／回測' : '未觀測'} ▾</button><button type="button" data-cycle-point="1" aria-label="後一個點位">›</button><input type="hidden" id="nextPoint" value="${safe(draftNextPointId)}"></div>
-        <div class="next-value-line"><label>讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 · 同站</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視 · 換站</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>前視 · 終點</option></select></label><div class="reading-value"><label>讀數（m）<input id="nextReading" data-reading ${decimals} value="${safe(draftNextValue)}" placeholder="0.000"></label><label class="inverted-toggle"><input id="nextInverted" type="checkbox" ${draftNextInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div></div>
+        <div class="next-value-line"><label>讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 · 同站</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視 · 換站</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>前視 · 終點</option></select></label><div class="reading-value"><label>讀數（m）<input id="nextReading" data-reading ${decimals.replace('enterkeyhint="next"', 'enterkeyhint="done"')} value="${safe(draftNextValue)}" placeholder="0.000"></label><label class="inverted-toggle"><input id="nextInverted" type="checkbox" ${draftNextInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div></div>
         <button type="button" data-add-next="${index}" class="primary record-next">記錄此點</button></div>` : ''}
       <details class="station-records"><summary>${setup.fsPointId ? `前視 ${safe(code(setup.fsPointId))} · ${safe(setup.fs)} m` : `本站已記錄 ${(setup.intermediate || []).length} 點`} · 點開核對</summary>
         <div class="reading-actions"><button type="button" data-field-map="${safe(setup.bsPointId)}">標註 ${safe(code(setup.bsPointId))}</button><button type="button" data-remove-station="${index}" class="quiet danger-text" title="刪除此站及後續站">刪除此站及後續站</button></div>${recorded}
@@ -1177,6 +1178,11 @@ function handleStationInput(event) {
 }
 
 function bindInputs() {
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.target.id !== 'nextReading' || event.isComposing || event.repeat || editPending) return;
+    event.preventDefault();
+    $('#stationList .active-station [data-add-next]')?.click();
+  });
   document.addEventListener('focusin', event => {
     const address = readingAddress(event.target);
     if (address) {
@@ -1188,6 +1194,7 @@ function bindInputs() {
   document.addEventListener('input', event => {
     const target = event.target;
     if (target.id === 'pointSearch') { renderPointPicker(); return; }
+    if (target.id === 'nextReading') clearUndo();
     if (isReadingInput(target)) {
       updateReadingWarning(target);
       if (readingFormatIssue(target.value)) { event.stopImmediatePropagation(); return; }

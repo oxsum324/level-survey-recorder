@@ -516,6 +516,10 @@ function updateWireFeedback(result = calculate(project)) {
 }
 
 function renderStations() {
+  const routeSummary = $('#routeSummary');
+  const pointActions = $('#measurePointActions');
+  // Reuse these nodes so reading rerenders keep every bound control and ID.
+  routeSummary?.remove(); pointActions?.remove();
   synchronizeSetups();
   const computed = calculate(project);
   ensureNextPoint();
@@ -531,14 +535,14 @@ function renderStations() {
       <div class="reading-value"><label>讀數（m）<input ${decimals} data-reading data-field="fs" data-station="${index}" value="${safe(setup.fs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="fsInverted" data-station="${index}" ${setup.fsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(setup.fsPointId), 'fs')}${correctionNote(index + 1, code(setup.fsPointId), 'fsInverted')}</div>
       <small class="raw-height">暫算高程 ${formatHeight(computed.stations[index]?.rawEndHeight)} m（未改正）</small><div class="reading-actions"><button type="button" data-field-map="${safe(setup.fsPointId)}">標圖</button>${active ? `<button type="button" data-convert-fs="${index}" class="quiet">改為中間視</button>` : ''}</div>${wireFields(setup, index, 'fs')}</div>` : '');
     return `<section class="card station ${active ? 'active-station' : ''}" data-station="${index}">
-      <div class="station-head"><h3>測站 ${index + 1} <small>由 ${safe(code(setup.bsPointId))} 後視</small></h3><button type="button" data-remove-station="${index}" class="quiet danger-text" title="刪除此站及後續站">刪除</button></div>
+      <div class="station-head"><div class="station-heading"><h3>測站 ${index + 1}</h3></div></div>
       <div class="bs-entry reading-value"><label>後視 BS · ${safe(code(setup.bsPointId))}<input ${decimals} data-reading data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="bsInverted" data-station="${index}" ${setup.bsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(setup.bsPointId), 'bs')}${correctionNote(index + 1, code(setup.bsPointId), 'bsInverted')}</div>
       ${wireFields(setup, index, 'bs')}
       ${waitingForNext ? `<div class="next-reading"><div class="next-point-label">下一點</div><div class="next-point-line"><button type="button" data-cycle-point="-1" aria-label="前一個點位">‹</button><button type="button" id="nextPointPicker" aria-haspopup="dialog">${safe(code(draftNextPointId))} · ${observedPointIds().has(draftNextPointId) ? '已觀測／回測' : '未觀測'} ▾</button><button type="button" data-cycle-point="1" aria-label="後一個點位">›</button><input type="hidden" id="nextPoint" value="${safe(draftNextPointId)}"></div>
         <div class="next-value-line"><label>讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 · 同站</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視 · 換站</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>前視 · 終點</option></select></label><div class="reading-value"><label>讀數（m）<input id="nextReading" data-reading ${decimals} value="${safe(draftNextValue)}" placeholder="0.000"></label><label class="inverted-toggle"><input id="nextInverted" type="checkbox" ${draftNextInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div></div>
         <button type="button" data-add-next="${index}" class="primary record-next">記錄此點</button></div>` : ''}
       <details class="station-records"><summary>${setup.fsPointId ? `前視 ${safe(code(setup.fsPointId))} · ${safe(setup.fs)} m` : `本站已記錄 ${(setup.intermediate || []).length} 點`} · 點開核對</summary>
-        <div class="reading-actions"><button type="button" data-field-map="${safe(setup.bsPointId)}">標註 ${safe(code(setup.bsPointId))}</button></div>${recorded}
+        <div class="reading-actions"><button type="button" data-field-map="${safe(setup.bsPointId)}">標註 ${safe(code(setup.bsPointId))}</button><button type="button" data-remove-station="${index}" class="quiet danger-text" title="刪除此站及後續站">刪除此站及後續站</button></div>${recorded}
         <div class="station-distance"><label>測線長度（m，按距離分配時填）<input ${decimals} data-field="distance" data-station="${index}" value="${safe(setup.distance)}" placeholder="例如 35.0"></label>${correctionNote(index + 1, code(setup.fsPointId), 'distance')}</div>
         <p class="wire-station-summary" data-wire-station="${index}" hidden></p><button type="button" data-copy-wire-distance="${index}" disabled>由後視距＋前視距帶入本站長度</button>
       </details>
@@ -546,6 +550,13 @@ function renderStations() {
   };
   const previous = project.setups.slice(0, -1);
   $('#stationList').innerHTML = (project.setups.length ? card(project.setups.at(-1), project.setups.length - 1) : '') + (previous.length ? `<details class="history"><summary>前 ${previous.length} 站 · 核對與更正</summary>${previous.map(card).join('')}</details>` : '');
+  const activeCard = $('#stationList .active-station');
+  if (routeSummary) (activeCard?.querySelector('.station-heading') || $('#measureActions')).append(routeSummary);
+  if (pointActions) {
+    const bsEntry = activeCard?.querySelector('.bs-entry');
+    if (bsEntry) bsEntry.after(pointActions);
+    else $('#stationList').before(pointActions);
+  }
   const last = project.setups.at(-1);
   $('#addStation').hidden = !!last && (!last.fsPointId || last.fsPointId === project.route.endId);
   $('#addStation').textContent = !last ? `開始第一站：後視 ${code(project.route.startId)}` : `搬站：於 ${code(last.fsPointId)} 讀後視`;

@@ -351,3 +351,60 @@ button:disabled{opacity:.5;cursor:not-allowed}
     --raw-ink:var(--ink);--raw-size:28px;--raw-line:1.2;--warning-ink:#7b1600;--warning-size:16px;--warning-weight:800;--inverted-size:16px;--check-size:24px;
   }
 }
+
+/* V0.7.1 compact field layout. Visual pills sit inside full-size touch targets. */
+.measure-controls{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto var(--touch-target);gap:6px;font-size:14px}
+.measure-controls button,.measure-help>summary,.wake-toggle{min-height:var(--touch-target);min-width:var(--touch-target);font-size:14px}
+.wake-toggle{position:relative;display:flex!important;flex-direction:row;justify-content:center;border:1px solid var(--line);border-radius:9px;padding:2px 6px;cursor:pointer}
+.wake-toggle:has(input:checked){background:var(--tabs-bg)}
+.wake-toggle:focus-within{outline:3px solid var(--warn);outline-offset:2px}
+.wake-toggle input{position:absolute;opacity:0;width:1px!important;min-width:1px!important;height:1px!important;min-height:1px!important}
+.wake-copy{display:flex;flex-direction:column;align-items:center;line-height:18px}
+#wakeLockState{font-weight:400;font-size:14px}
+.measure-head>h2{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.measure-help{position:relative;margin:0;font-size:14px}
+.measure-help>summary{display:flex;align-items:center;justify-content:center;list-style:none;border:1px solid var(--line);border-radius:9px;background:var(--paper);font-size:20px}
+.measure-help>summary::-webkit-details-marker{display:none}
+.measure-help[open] p{position:absolute;right:0;top:100%;z-index:6;width:min(340px,90vw);max-height:55dvh;overflow:auto;margin:4px 0;border:1px solid var(--line);box-shadow:var(--card-shadow);font-size:14px;white-space:normal}
+#routeSummary{margin:2px 0 0;font-size:14px;line-height:18px;color:var(--muted);white-space:normal}
+#measureNotice:empty{display:none}
+#measureNotice{font-size:14px;line-height:1.4;margin:6px 0}
+.measure-point-actions button{min-height:var(--touch-target);min-width:var(--touch-target);font-size:14px}
+@media(max-width:640px){
+  .topbar,body.measure-mode .topbar{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:20px var(--touch-target);gap:0 4px;padding:2px 10px;align-items:center}
+  .topbar>div,.top-actions{display:contents}
+  .topbar small{display:none}
+  .topbar h1,body.measure-mode .topbar h1{grid-row:1;grid-column:1;margin:0;font-size:16px;line-height:20px;white-space:nowrap}
+  .topbar h1 span{font-size:14px}
+  .topbar #saveState,body.measure-mode .top-actions #saveState{display:block;grid-row:1;grid-column:2;font-size:14px;line-height:20px;text-align:right}
+  #sunlightToggle,body.measure-mode .top-actions #sunlightToggle{grid-row:2;grid-column:1;justify-self:start;display:flex;align-items:center;min-height:var(--touch-target);padding:0;border:0;background:transparent;font-size:14px}
+  #sunlightToggle span{display:flex;align-items:center;min-height:32px;padding:4px 10px;border:1px solid var(--line);border-radius:99px;background:var(--paper);color:var(--brand)}
+  .top-actions #exportState{grid-row:2;grid-column:2;justify-self:end;display:flex;align-items:center;min-height:32px;max-height:40px;padding:4px 8px;border-radius:99px;font-size:14px;line-height:20px;white-space:nowrap}
+  .top-actions #offlineState{grid-row:1;grid-column:2;max-width:130px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:14px}
+  .topbar:has(#offlineState:not([hidden])) #saveState{visibility:hidden}
+  .tabs button,body.measure-mode .tabs button{min-height:var(--touch-target);font-size:14px;line-height:18px;padding:3px 1px}
+  body.measure-mode main{padding:0 8px}
+  .measure-head{margin:2px 0;display:block}
+  .measure-head .measure-controls{display:grid;order:initial;min-height:var(--touch-target)}
+  .measure-controls button{min-height:var(--touch-target);font-size:14px;padding:4px 6px}
+  .measure-head .measure-help{order:initial}
+  .measure-help[open]{flex:initial}
+  .active-station{margin:2px 0 6px;padding:6px}
+  .station-head{min-height:0;margin:0;align-items:start}
+  .station-head h3{font-size:16px;line-height:18px;margin:0}
+  .bs-entry{margin-top:2px}
+  .bs-entry>label{font-size:14px;line-height:18px;gap:2px}
+  .measure-point-actions{margin:4px 0;gap:4px}
+  #measurePanel button,#measurePanel select,#measurePanel summary,#measurePanel .file-button{min-height:var(--touch-target);font-size:max(14px, .875rem)}
+  #measurePanel [data-cycle-point]{font-size:22px}
+  #measurePanel .reading-value label.inverted-toggle{min-height:var(--touch-target);font-size:var(--inverted-size,14px)}
+  #measurePanel label,#measurePanel small,#measurePanel .station-records,#measurePanel .wire-details{font-size:max(14px,.875rem)}
+}
+
+@media(max-width:640px){
+  .measure-head{margin:0}
+  .active-station{margin-top:1px;padding:4px}
+  .station-heading #routeSummary{margin-top:0}
+  .bs-entry{margin-top:0}
+  .bs-entry>label{line-height:16px}
+}

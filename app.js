@@ -216,6 +216,7 @@ function editReason(context) {
   $('#editReasonChoice').value = '讀錯重讀';
   $('#editReasonOther').value = '';
   dialog.showModal();
+  $('#editReasonChoice').focus();
   return new Promise(resolve => {
     const done = value => { dialog.close(); $('#saveEditReason').removeEventListener('click', save); $('#cancelEditReason').removeEventListener('click', cancel); dialog.removeEventListener('cancel', onCancel); resolve(value); };
     const save = () => {
@@ -229,6 +230,14 @@ function editReason(context) {
     $('#cancelEditReason').addEventListener('click', cancel);
     dialog.addEventListener('cancel', onCancel);
   });
+}
+
+function editPreview(address, from, to) {
+  const labels = { bs: '後視', fs: '前視', value: '中間視', bsUpper: '後視上絲', bsLower: '後視下絲', fsUpper: '前視上絲', fsLower: '前視下絲', upper: '中間視上絲', lower: '中間視下絲', distance: '測線長度', pointId: '中間視點位', fsPointId: '前視點位' };
+  const pointField = address.key === 'pointId' || address.key === 'fsPointId';
+  const inverted = address.key.startsWith('bs') ? address.item.bsInverted : address.key.startsWith('fs') ? address.item.fsInverted : address.item.inverted;
+  const display = value => pointField ? code(value) : value === '' ? '空白' : `${value} m`;
+  return `第 ${address.station} 站 ${address.pointCode} 點 ‧ ${labels[address.key] || address.key}${inverted && address.key !== 'distance' && !pointField ? '（倒尺）' : ''}：${display(from)} → ${display(to)}`;
 }
 
 function readingAddress(target) {
@@ -1278,7 +1287,7 @@ function bindInputs() {
     }
     editPending = true;
     const pointField = address.key === 'pointId' || address.key === 'fsPointId';
-    const reason = await editReason(`第 ${address.station} 站 ${address.pointCode}：${pointField ? code(from) : from} → ${pointField ? code(to) : to}`);
+    const reason = await editReason(editPreview(address, from, to));
     const result = resolveObservedEdit({ from, to, reason, station: address.station, pointCode: address.pointCode, field: address.key, at: stamp(), id: uid() });
     if (result.accepted) {
       address.item[address.key] = result.value;

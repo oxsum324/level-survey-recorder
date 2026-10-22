@@ -209,3 +209,27 @@ test('M1 invalid first entry stays unsaved until corrected and clearing removes 
   assert.equal(target.warning.hidden, true);
   assert.equal(h.run('project.auditLog.length'), 0);
 });
+
+
+test('M2 correction preview identifies station, point, role, units and inverted staff', async () => {
+  const h = formatCase();
+  const target = readingTarget({ reading: '', field: 'bs', station: '0' }, '1.417');
+  h.run(`editReason = async text => { document.querySelector('#editReasonContext').textContent = text; return null; };`);
+  await h.dispatch('change', target);
+  assert.equal(h.node('#editReasonContext').textContent, '第 1 站 BM1 點 ‧ 後視：1.500 m → 1.417 m');
+  assert.equal(target.value, '1.500', 'cancel restores original text');
+  h.run('project.setups[0].bsInverted = true');
+  target.value = '1.417'; await h.dispatch('change', target);
+  assert.equal(h.node('#editReasonContext').textContent, '第 1 站 BM1 點 ‧ 後視（倒尺）：1.500 m → 1.417 m');
+  h.node('#editReasonContext').textContent = '';
+  target.value = '1.500'; await h.dispatch('change', target);
+  assert.equal(h.node('#editReasonContext').textContent, '', 'identical text does not open a dialog');
+});
+
+test('M2 opening the correction dialog places focus on its reason selector', () => {
+  const h = appHarness(); let focused = false;
+  h.node('#editReasonChoice').focus = () => { focused = true; };
+  h.run("editReason('第 1 站 BM1 點 ‧ 後視：1.500 m → 1.417 m')");
+  assert.equal(focused, true);
+  assert.equal(h.node('#editReasonContext').textContent, '第 1 站 BM1 點 ‧ 後視：1.500 m → 1.417 m');
+});

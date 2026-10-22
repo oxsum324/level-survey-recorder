@@ -7,6 +7,14 @@ function numberOf(value) {
   return Number.isFinite(valueNumber) ? valueNumber : null;
 }
 
+// Decimal commas from mobile keyboards retain the existing numeric meaning.
+export function readingFormatIssue(value) {
+  const text = String(value ?? '');
+  if (text.trim() === '') return null;
+  return /^-?\d+(?:\.\d{1,5})?$/.test(text.replace(',', '.'))
+    ? null : '讀數格式不正確，請輸入公尺數值，例如 1.417';
+}
+
 export function readingIssue(value, length, station, role, pointCode) {
   const n = numberOf(value);
   if (n === null) return null;
@@ -132,6 +140,17 @@ export function calculate(project) {
       break;
     }
     if (staffLengthM === null || staffLengthM <= 0) break;
+    // Validate legacy stored text before calculations; preserve every source value.
+    const storedReadings = [
+      [setup.bsPointId, [setup.bs, setup.bsUpper, setup.bsLower]],
+      ...(setup.intermediate || []).map(sight => [sight.pointId, [sight.value, sight.upper, sight.lower]]),
+      [setup.fsPointId, [setup.fs, setup.fsUpper, setup.fsLower]],
+    ];
+    const malformed = storedReadings.find(([, values]) => values.some(value => readingFormatIssue(value)));
+    if (malformed) {
+      issues.push(`${label} ${points.get(malformed[0])?.code || '未指定'} 點讀數格式不正確`);
+      break;
+    }
     const bsIssue = readingIssue(setup.bs, staffLengthM, i + 1, '後視', points.get(anchor)?.code || '未指定');
     if (bsIssue) { issues.push(bsIssue); break; }
     const bs = reading(setup.bs, setup.bsInverted);

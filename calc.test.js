@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeThreeWire, buildSummaryCsv, calculate, formulaToleranceMm, readingIssue, suggestMmCorrection, twoPegCheck } from './calc.js';
+import { analyzeThreeWire, buildSummaryCsv, calculate, formulaToleranceMm, readingFormatIssue, readingIssue, suggestMmCorrection, twoPegCheck } from './calc.js';
 
 function example(finalFs = '0.883', toleranceMm = '5', adjustMethod = 'stations') {
   const codes = ['BM1', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'TP'];
@@ -251,4 +251,29 @@ test('two-peg check reports signed error without a pass or fail judgment', () =>
   assert.equal(result.per100mMm.toFixed(2), '-20.00');
   assert.equal(twoPegCheck({ a1: '1.000' }), null);
   assert.match(twoPegCheck({ a1: '1', b1: '2', a2: '3', b2: '4', distanceM: '0' }).issue, /大於零/);
+});
+
+
+test('M1 reading text accepts decimal commas and blanks but rejects malformed numbers', () => {
+  for (const value of ['', '   ', null, undefined, '1,417', '1.417', '-1.5', '0', '1.12345']) assert.equal(readingFormatIssue(value), null, String(value));
+  for (const value of ['1.5001.500', 'abc', '1.', '中文', '1 5', ' 1.5', '1.5 ', '1,2,3', '1,234,567', '1.123456', '1e2']) {
+    assert.equal(readingFormatIssue(value), '讀數格式不正確，請輸入公尺數值，例如 1.417', value);
+  }
+  assert.equal(readingIssue('abc', 5, 1, '後視', 'BM1'), null, 'existing range checker remains unchanged');
+});
+
+test('M1 legacy malformed BS, IS, FS and wire text reports format without mutating its source', () => {
+  for (const kind of ['bs', 'is', 'fs', 'bsUpper', 'bsLower', 'isUpper', 'fsLower']) {
+    const project = example();
+    if (kind === 'is') project.setups[0].intermediate[0].value = '1.5001.500';
+    else if (kind === 'isUpper') project.setups[0].intermediate[0].upper = 'abc';
+    else project.setups[0][kind] = 'abc';
+    const before = structuredClone(project);
+    const result = calculate(project);
+    assert.ok(result.issues.some(issue => /第 1 站 .+ 點讀數格式不正確/.test(issue)), kind);
+    assert.equal(result.complete, false, kind);
+    assert.deepEqual(project, before);
+  }
+  const project = example(); project.setups[0].bs = '';
+  assert.ok(calculate(project).issues.includes('第 1 站的後視讀數尚未填寫。'));
 });

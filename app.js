@@ -1,4 +1,4 @@
-import { buildSummaryCsv, calculate, formatHeight, formatMm, formatObservationTime, formulaToleranceMm, readingIssue, suggestMmCorrection, twoPegCheck, VERSION } from './calc.js';
+import { buildSummaryCsv, calculate, formatHeight, formatMm, formatObservationTime, formulaToleranceMm, readingFormatIssue, readingIssue, suggestMmCorrection, twoPegCheck, VERSION } from './calc.js';
 import { loadProject, saveProject, saveMedia, loadMedia, deleteMedia, replaceProject, makeBackup, parseBackup } from './store.js';
 import { resolveObservedEdit, actionEntry, pointDeletionEntry, auditReportEntry } from './audit.js';
 import { fingerprint, sha256Blob } from './integrity.js';
@@ -421,14 +421,20 @@ function synchronizeSetups() {
   });
 }
 
+function isReadingInput(input) {
+  return input.dataset.reading !== undefined || input.dataset.wireField !== undefined
+    || input.dataset.isWire !== undefined || /^peg[A-B][12]$/.test(input.id);
+}
+
 function updateReadingWarning(input) {
-  const station = Number(input.closest('[data-station]')?.dataset.station ?? project.setups.length - 1);
+  const address = readingAddress(input);
+  const station = address ? address.station - 1 : Number(input.closest('[data-station]')?.dataset.station ?? project.setups.length - 1);
   const setup = project.setups[station];
   const sight = input.dataset.isValue !== undefined ? setup?.intermediate[parsePair(input.dataset.isValue)[1]] : null;
   const role = sight ? '中間視' : input.id === 'nextReading' ? ($('#nextRole').value === 'IS' ? '中間視' : '前視') : input.dataset.field === 'bs' ? '後視' : '前視';
   const pointId = sight?.pointId || (input.id === 'nextReading' ? $('#nextPoint').value : input.dataset.field === 'bs' ? setup?.bsPointId : setup?.fsPointId);
   const length = Number(String(project.route.staffLengthM ?? '5').replace(',', '.'));
-  const issue = Number.isFinite(length) && length > 0 ? readingIssue(input.value, length, station + 1, role, code(pointId)) : null;
+  const issue = readingFormatIssue(input.value) || (Number.isFinite(length) && length > 0 ? readingIssue(input.value, length, station + 1, role, address?.pointCode || code(pointId)) : null);
   const warning = input.closest('.reading-value')?.querySelector('.reading-warning');
   input.classList.toggle('reading-invalid', !!issue);
   input.setAttribute('aria-invalid', String(!!issue));
@@ -459,7 +465,7 @@ function applyMmCorrection(input, correction) {
 }
 
 function updateReadingWarnings() {
-  document.querySelectorAll('[data-reading]').forEach(updateReadingWarning);
+  document.querySelectorAll('[data-reading], [data-wire-field], [data-is-wire]').forEach(updateReadingWarning);
 }
 
 function wireFields(setup, index, role, sightIndex = null) {
@@ -469,7 +475,7 @@ function wireFields(setup, index, role, sightIndex = null) {
   const attr = key => sightIndex === null ? `data-wire-field="${key}" data-station="${index}"` : `data-is-wire="${index}:${sightIndex}:${key}"`;
   const check = sightIndex === null ? `${index}:${role}` : `${index}:is:${sightIndex}`;
   const pointCode = code(sightIndex === null ? setup[role === 'bs' ? 'bsPointId' : 'fsPointId'] : item.pointId);
-  return `<details class="wire-details"><summary>上絲／下絲（選填）</summary><div class="wire-fields"><div><label>上絲（m）<input ${decimals} ${attr(upperKey)} value="${safe(item[upperKey])}" placeholder="0.000"></label>${correctionNote(index + 1, pointCode, upperKey)}</div><div><label>下絲（m）<input ${decimals} ${attr(lowerKey)} value="${safe(item[lowerKey])}" placeholder="0.000"></label>${correctionNote(index + 1, pointCode, lowerKey)}</div></div><p class="wire-check" data-wire-check="${check}" hidden></p></details>`;
+  return `<details class="wire-details"><summary>上絲／下絲（選填）</summary><div class="wire-fields"><div class="reading-value"><label>上絲（m）<input ${decimals} ${attr(upperKey)} value="${safe(item[upperKey])}" placeholder="0.000"></label><small class="reading-warning" hidden></small>${correctionNote(index + 1, pointCode, upperKey)}</div><div class="reading-value"><label>下絲（m）<input ${decimals} ${attr(lowerKey)} value="${safe(item[lowerKey])}" placeholder="0.000"></label><small class="reading-warning" hidden></small>${correctionNote(index + 1, pointCode, lowerKey)}</div></div><p class="wire-check" data-wire-check="${check}" hidden></p></details>`;
 }
 
 function correctionNote(station, pointCode, field) {
@@ -1162,6 +1168,10 @@ function bindInputs() {
   document.addEventListener('input', event => {
     const target = event.target;
     if (target.id === 'pointSearch') { renderPointPicker(); return; }
+    if (isReadingInput(target)) {
+      updateReadingWarning(target);
+      if (readingFormatIssue(target.value)) { event.stopImmediatePropagation(); return; }
+    }
     const address = readingAddress(target);
     if (address && (entryStart.get(target) ?? String(address.item[address.key] ?? '')) !== '' && String(address.item[address.key]) !== target.value) {
       updateReadingWarning(target);
@@ -1235,6 +1245,11 @@ function bindInputs() {
   });
   document.addEventListener('change', async event => {
     const target = event.target;
+
+    if (isReadingInput(target)) {
+      updateReadingWarning(target);
+      if (readingFormatIssue(target.value)) { event.stopImmediatePropagation(); return; }
+    }
     if ((target.dataset.inverted !== undefined || target.dataset.isInverted !== undefined) && !editPending) {
       const stationIndex = target.dataset.inverted !== undefined ? Number(target.dataset.station) : parsePair(target.dataset.isInverted)[0];
       const sightIndex = target.dataset.isInverted !== undefined ? parsePair(target.dataset.isInverted)[1] : null;
@@ -1330,8 +1345,8 @@ function bindActions() {
       if (index !== project.setups.length - 1 || setup.fsPointId) return;
       if (!validReading(setup.bs)) { notify('請先填妥本測站的後視 BS。', true); return; }
       if (updateReadingWarning($(`[data-field="bs"][data-station="${index}"]`))) return;
-      if (!point(pointId) || !validReading(value)) { notify('請選擇下一個點位並填入有效讀數。', true); return; }
       if (updateReadingWarning($('#nextReading'))) return;
+      if (!point(pointId) || !validReading(value)) { notify('請選擇下一個點位並填入有效讀數。', true); return; }
       if (role === 'FINISH' && pointId !== project.route.endId) { notify(`終點前視須選預定終點 ${code(project.route.endId)}。`, true); return; }
       if (role === 'MOVE' && pointId === project.route.endId) { notify('已到預定終點，請選「終點前視」。', true); return; }
       if (role === 'IS' && pointId === project.route.endId) { notify('預定終點應記為前視 FS。', true); return; }

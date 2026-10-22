@@ -164,3 +164,48 @@ test('L8 the size notice is informational and successful delivery still complete
   h.run('showBackupEstimate(1000)');
   assert.equal(h.node('#backupSizeNotice').hidden, true);
 });
+
+
+function formatCase() {
+  const h = appHarness();
+  h.run(`project = blankProject(); project.points.push({ id: 's1', code: 'S1', type: 'S' });
+    project.setups = [{ bsPointId: project.route.startId, bs: '1.500', bsUpper: '1.600', bsLower: '1.400', fsPointId: 's1', fs: '0.500', intermediate: [{ pointId: 's1', value: '0.600', upper: '0.700', lower: '0.500' }] }]; bindInputs();`);
+  return h;
+}
+function readingTarget(dataset, value) {
+  const warning = { hidden: true, textContent: '' };
+  const container = { querySelector: selector => selector === '.reading-warning' ? warning : null };
+  return { id: '', dataset, value, classList: { toggle() {} }, setAttribute() {}, warning,
+    closest: selector => selector === '.reading-value' ? container : { dataset: { station: '0' } } };
+}
+
+test('M1 malformed input and blur preserve every saved reading and audit trail', async () => {
+  for (const dataset of [{ reading: '', field: 'bs', station: '0' }, { reading: '', field: 'fs', station: '0' }, { reading: '', isValue: '0:0' }, { wireField: 'bsUpper', station: '0' }, { wireField: 'bsLower', station: '0' }, { isWire: '0:0:upper' }, { isWire: '0:0:lower' }]) {
+    const h = formatCase();
+    const target = readingTarget(dataset, '1.5001.500');
+    const before = h.run('JSON.stringify(project)');
+    await h.dispatch('input', target);
+    await h.dispatch('change', target);
+    assert.equal(h.run('JSON.stringify(project)'), before);
+    assert.equal(target.value, '1.5001.500');
+    assert.equal(target.warning.hidden, false);
+    assert.match(target.warning.textContent, /讀數格式不正確/);
+    assert.equal(h.node('#editReasonContext').textContent, '');
+  }
+});
+
+test('M1 invalid first entry stays unsaved until corrected and clearing removes its warning', async () => {
+  const h = formatCase(); h.run("project.setups[0].bs = ''");
+  const target = readingTarget({ reading: '', field: 'bs', station: '0' }, 'abc');
+  await h.dispatch('focusin', target); await h.dispatch('input', target); await h.dispatch('change', target);
+  assert.equal(h.run('project.setups[0].bs'), '');
+  target.value = '1,417'; await h.dispatch('input', target);
+  assert.equal(h.run('project.setups[0].bs'), '1,417');
+  assert.equal(target.warning.hidden, true);
+  target.value = '1.'; await h.dispatch('input', target);
+  assert.equal(h.run('project.setups[0].bs'), '1,417');
+  target.value = ''; await h.dispatch('input', target);
+  assert.equal(h.run('project.setups[0].bs'), '');
+  assert.equal(target.warning.hidden, true);
+  assert.equal(h.run('project.auditLog.length'), 0);
+});

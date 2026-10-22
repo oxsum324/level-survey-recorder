@@ -34,6 +34,11 @@
         },
         {
           "start": 340,
+          "end": 404,
+          "label": "table.point-print-table[1] 點號類別位置說明BM1BMBM1 現場位置S1SS1 現場位置"
+        },
+        {
+          "start": 340,
           "end": 361,
           "label": "tr[1] 點號類別位置說明"
         },
@@ -76,6 +81,11 @@
           "start": 571,
           "end": 592,
           "label": "tr[7] 1BM11.50086.65386.653預定終點前視；本站改正 0.00 mm"
+        },
+        {
+          "start": 672,
+          "end": 791,
+          "label": "section.analysis-panel[2] 算術複核 計算一致 ΣBS − ΣFS：0.000 m ＝ 終點 − 起點：0.000 m Σ升 − Σ降：0.000 m ＝ 終點 − 起點：0.000 m 兩法點高程最大差：0"
         },
         {
           "start": 683,
@@ -181,6 +191,11 @@
           "start": 1742,
           "end": 1800,
           "label": "h2[6] 六、讀數更正與操作紀錄 + 首區塊"
+        },
+        {
+          "start": 1816,
+          "end": 1875,
+          "label": "footer[1] 列印時間：2026/10/22 下午9:58:45｜來源工具：水準測量現場紀錄 V0.7.2｜資料指紋 SHA-256：629ed1baf804e1a4…完整指紋：629ed1ba"
         }
       ],
       "pageHeight": 1009,
@@ -203,27 +218,39 @@
   },
   "long": {
     "plan": {
-      "pages": 33,
+      "pages": 34,
       "canvasWidth": 1362,
       "canvasHeight": 2018,
       "area": 2748516,
       "slices": [
         {
           "start": 0,
-          "end": 993,
+          "end": 340,
           "next": [
-            "tr[32] S29S測點 29 圍牆位置"
+            "table.point-print-table[1] 點號類別位置說明BM1BMBM1 現場位置S1SS1 現場位置S2SS2 現場位置S3SS3 現場位置S4SS4 現場位置S5SS5 現場位置S6SS6 現場位置S7SS7 現場位",
+            "tr[1] 點號類別位置說明"
           ],
           "hardCuts": []
         },
         {
-          "start": 993,
-          "end": 2002,
-          "next": [],
+          "start": 340,
+          "end": 1329,
+          "next": [
+            "tr[43] 1S120.50086.74886.748中間視"
+          ],
           "hardCuts": []
         },
         {
-          "start": 2002,
+          "start": 1329,
+          "end": 2130,
+          "next": [
+            "h2[3] 三、點位照片",
+            "h2[3] 三、點位照片 + 首區塊"
+          ],
+          "hardCuts": []
+        },
+        {
+          "start": 2130,
           "end": 2761,
           "next": [
             "article.print-photo[2] 點位 S2｜測點 2 照片攝影者：未記錄｜原檔：photo-2.jpg｜拍攝時間：2026-10-22 08:00（來源：匯入時間）"
@@ -480,6 +507,11 @@
           "start": 178,
           "end": 235,
           "label": "h2[1] 一、測線與點位 + 首區塊"
+        },
+        {
+          "start": 340,
+          "end": 1035,
+          "label": "table.point-print-table[1] 點號類別位置說明BM1BMBM1 現場位置S1SS1 現場位置S2SS2 現場位置S3SS3 現場位置S4SS4 現場位置S5SS5 現場位置S6SS6 現場位置S7SS7 現場位"
         },
         {
           "start": 340,
@@ -827,6 +859,11 @@
           "label": "tr[67] 3BM10.88386.65386.653預定終點前視；本站改正 0.00 mm"
         },
         {
+          "start": 1935,
+          "end": 2054,
+          "label": "section.analysis-panel[2] 算術複核 計算一致 ΣBS − ΣFS：0.000 m ＝ 終點 − 起點：0.000 m Σ升 − Σ降：0.000 m ＝ 終點 − 起點：0.000 m 兩法點高程最大差：0"
+        },
+        {
           "start": 1946,
           "end": 1967,
           "label": "h3[1] 算術複核 計算一致"
@@ -1080,12 +1117,22 @@
           "start": 20814,
           "end": 20872,
           "label": "h2[6] 六、讀數更正與操作紀錄 + 首區塊"
+        },
+        {
+          "start": 20888,
+          "end": 20947,
+          "label": "footer[1] 列印時間：2026/10/22 下午9:58:47｜來源工具：水準測量現場紀錄 V0.7.2｜資料指紋 SHA-256：2914642e7a8917f5…完整指紋：2914642e"
         }
       ],
       "pageHeight": 1009,
       "height": 20947
     },
     "canvases": [
+      {
+        "width": 1362,
+        "height": 2018,
+        "area": 2748516
+      },
       {
         "width": 1362,
         "height": 2018,

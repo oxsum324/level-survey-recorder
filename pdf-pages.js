@@ -38,7 +38,7 @@ export function reportBreakPoints(container) {
     const index = [...container.querySelectorAll(element.tagName)].indexOf(element) + 1;
     return `${element.tagName.toLowerCase()}${element.className ? '.' + String(element.className).trim().replace(/\s+/g, '.') : ''}[${index}] ${element.textContent.trim().replace(/\s+/g, ' ').slice(0, 90)}`;
   };
-  return [...container.querySelectorAll('h2, h3, tr, .print-photo, .photo-card, .print-alert')].flatMap(element => {
+  return [...container.querySelectorAll('h2, h3, tr, .print-photo, .photo-card, .print-alert, .print-map, .point-print-table, .analysis-panel, footer')].flatMap(element => {
     const following = element.matches('h2, h3') ? element.nextElementSibling : null;
     const block = { start: top(element), end: top(element) + element.offsetHeight, label: label(element) };
     return following ? [block, { ...block, end: Math.max(block.end, top(following) + following.offsetHeight), label: `${block.label} + 首區塊` }] : [block];

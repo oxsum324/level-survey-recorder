@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pageCanvasPlan, CANVAS_LIMITS } from './pdf-pages.js';
+import { pageCanvasPlan, reportBreakPoints, CANVAS_LIMITS } from './pdf-pages.js';
 
 test('L9 long reports keep the scale and bound each page canvas independently of total height', () => {
   const plan = pageCanvasPlan(681, 33157, 1009, 2);
@@ -44,4 +44,19 @@ test('R1 exact boundaries and fractional layout pixels do not lose content or st
   assert.deepEqual(plan.slices.map(slice => slice.end), [1000, 2000]);
   assert.equal(plan.slices.at(-1).end, 2000);
   assert.ok(plan.slices.every(slice => slice.end > slice.start && slice.end - slice.start <= 1000));
+});
+
+test('R1 DOM collection protects existing print-avoid panels, maps, tables and footer in nested offset coordinates', () => {
+  const container = {};
+  const section = { offsetTop: 100, offsetParent: container };
+  const frame = { tagName: 'SECTION', className: 'analysis-panel', textContent: '算術複核', offsetTop: 850, offsetHeight: 140, offsetParent: section, matches: () => false };
+  container.querySelectorAll = selector => {
+    if (selector === 'SECTION') return [frame];
+    for (const required of ['.print-map', '.point-print-table', '.analysis-panel', 'footer']) assert.ok(selector.includes(required));
+    return [frame];
+  };
+  const blocks = reportBreakPoints(container);
+  assert.equal(blocks[0].start, 950);
+  assert.equal(blocks[0].end, 1090);
+  assert.deepEqual(pageCanvasPlan(681, 1500, 1000, 2, blocks).slices.map(slice => slice.end), [950, 1500]);
 });

@@ -255,8 +255,8 @@ test('two-peg check reports signed error without a pass or fail judgment', () =>
 
 
 test('M1 reading text accepts decimal commas and blanks but rejects malformed numbers', () => {
-  for (const value of ['', '   ', null, undefined, '1,417', '1.417', '-1.5', '0', '1.12345']) assert.equal(readingFormatIssue(value), null, String(value));
-  for (const value of ['1.5001.500', 'abc', '1.', '中文', '1 5', ' 1.5', '1.5 ', '1,2,3', '1,234,567', '1.123456', '1e2']) {
+  for (const value of ['', '   ', null, undefined, '1,417', '1.417', '-1.5', '0', '1.12345', ' 1.5', '1.5 ', ' 1.500', '1.500 ']) assert.equal(readingFormatIssue(value), null, String(value));
+  for (const value of ['1.5001.500', 'abc', '1.', '中文', '1 5', '1,2,3', '1,234,567', '1.123456', '1e2']) {
     assert.equal(readingFormatIssue(value), '讀數格式不正確，請輸入公尺數值，例如 1.417', value);
   }
   assert.equal(readingIssue('abc', 5, 1, '後視', 'BM1'), null, 'existing range checker remains unchanged');
@@ -276,4 +276,17 @@ test('M1 legacy malformed BS, IS, FS and wire text reports format without mutati
   }
   const project = example(); project.setups[0].bs = '';
   assert.ok(calculate(project).issues.includes('第 1 站的後視讀數尚未填寫。'));
+});
+
+
+test('A surrounding whitespace in legacy BS readings keeps the same calculation result', () => {
+  const clean = example(); clean.setups[0].bs = '1.500';
+  const expected = calculate(clean);
+  for (const value of [' 1.500', '1.500 ', ' 1.500 ']) {
+    const legacy = structuredClone(clean); legacy.setups[0].bs = value;
+    const result = calculate(legacy);
+    assert.equal(result.issues.some(issue => issue.includes('讀數格式不正確')), false);
+    assert.deepEqual(result, expected);
+    assert.equal(legacy.setups[0].bs, value, 'calculations retain original legacy text');
+  }
 });

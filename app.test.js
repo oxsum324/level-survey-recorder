@@ -245,3 +245,44 @@ test('M1 malformed next-reading input still invalidates the previous destructive
   assert.equal(h.run('JSON.stringify(project)'), before);
   assert.equal(target.warning.hidden, false);
 });
+
+
+test('A whitespace-only reading changes normalize without a correction dialog or audit entry', async () => {
+  for (const [dataset, expression, expected] of [
+    [{ reading: '', field: 'bs', station: '0' }, 'project.setups[0].bs', '1.500'],
+    [{ reading: '', field: 'fs', station: '0' }, 'project.setups[0].fs', '0.500'],
+    [{ reading: '', isValue: '0:0' }, 'project.setups[0].intermediate[0].value', '0.600'],
+    [{ wireField: 'bsUpper', station: '0' }, 'project.setups[0].bsUpper', '1.600'],
+    [{ isWire: '0:0:lower' }, 'project.setups[0].intermediate[0].lower', '0.500'],
+  ]) for (const legacy of [false, true]) {
+    const h = formatCase();
+    if (legacy) h.run(`${expression} = ' ${expected}'`);
+    const target = readingTarget(dataset, ` ${expected} `);
+    await h.dispatch('focusin', target); await h.dispatch('input', target); await h.dispatch('change', target);
+    assert.equal(h.run(expression), expected);
+    assert.equal(target.value, expected);
+    assert.equal(h.node('#editReasonContext').textContent, '');
+    assert.equal(h.run('project.auditLog.length'), 0);
+  }
+});
+
+test('A padded initial reading is trimmed before it enters the model', async () => {
+  const h = formatCase(); h.run("project.setups[0].bs = ''");
+  const target = readingTarget({ reading: '', field: 'bs', station: '0' }, ' 1.500 ');
+  await h.dispatch('focusin', target); await h.dispatch('input', target);
+  assert.equal(h.run('project.setups[0].bs'), '1.500');
+  await h.dispatch('change', target);
+  assert.equal(target.value, '1.500');
+  assert.equal(h.run('project.auditLog.length'), 0);
+});
+
+test('A a genuinely different padded reading still requires its correction reason', async () => {
+  const h = formatCase();
+  h.run(`editReason = async text => { document.querySelector('#editReasonContext').textContent = text; return null; };`);
+  const target = readingTarget({ reading: '', field: 'bs', station: '0' }, ' 1.417 ');
+  await h.dispatch('focusin', target); await h.dispatch('input', target); await h.dispatch('change', target);
+  assert.equal(h.node('#editReasonContext').textContent, '第 1 站 BM1 點 ‧ 後視：1.500 m → 1.417 m');
+  assert.equal(h.run('project.setups[0].bs'), '1.500');
+  assert.equal(target.value, '1.500');
+  assert.equal(h.run('project.auditLog.length'), 0);
+});

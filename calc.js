@@ -9,8 +9,8 @@ function numberOf(value) {
 
 // Decimal commas from mobile keyboards retain the existing numeric meaning.
 export function readingFormatIssue(value) {
-  const text = String(value ?? '');
-  if (text.trim() === '') return null;
+  const text = String(value ?? '').trim();
+  if (text === '') return null;
   return /^-?\d+(?:\.\d{1,5})?$/.test(text.replace(',', '.'))
     ? null : '讀數格式不正確，請輸入公尺數值，例如 1.417';
 }

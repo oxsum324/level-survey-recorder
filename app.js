@@ -1138,26 +1138,27 @@ function parsePair(pair) { return pair.split(':').map(Number); }
 
 function handleStationInput(event) {
   const target = event.target;
+  const value = isReadingInput(target) ? target.value.trim() : target.value;
   if (target.dataset.wireField !== undefined) {
     const item = project.setups[Number(target.dataset.station)], key = target.dataset.wireField;
-    observedTimestamp(item, key, item[key], target.value); item[key] = target.value;
+    observedTimestamp(item, key, item[key], value); item[key] = value;
     updateWireFeedback(renderResult()); queueSave(); return true;
   }
   if (target.dataset.isWire !== undefined) {
     const [station, sight, key] = target.dataset.isWire.split(':');
     const item = project.setups[Number(station)].intermediate[Number(sight)];
-    observedTimestamp(item, key, item[key], target.value); item[key] = target.value;
+    observedTimestamp(item, key, item[key], value); item[key] = value;
     updateWireFeedback(renderResult()); queueSave(); return true;
   }
   if (target.dataset.field !== undefined) {
     const index = Number(target.dataset.station);
-    if (target.dataset.field === 'fsPointId' && index + 1 < project.setups.length && project.setups[index + 1].bs !== '' && target.value !== project.setups[index].fsPointId) {
+    if (target.dataset.field === 'fsPointId' && index + 1 < project.setups.length && project.setups[index + 1].bs !== '' && value !== project.setups[index].fsPointId) {
       target.value = project.setups[index].fsPointId;
       notify('下一站已有後視讀數；不可直接改動本轉點。請先移除後續測站再修改。', true);
       return true;
     }
-    observedTimestamp(project.setups[index], target.dataset.field, project.setups[index][target.dataset.field], target.value);
-    project.setups[index][target.dataset.field] = target.value;
+    observedTimestamp(project.setups[index], target.dataset.field, project.setups[index][target.dataset.field], value);
+    project.setups[index][target.dataset.field] = value;
     if (target.dataset.reading !== undefined) updateReadingWarning(target);
     if (target.dataset.field === 'fsPointId') renderStations();
     else { updateWireFeedback(renderResult()); queueSave(); }
@@ -1168,8 +1169,8 @@ function handleStationInput(event) {
     const [station, sight] = parsePair(target.dataset.isPoint ?? target.dataset.isValue);
     const item = project.setups[station].intermediate[sight];
     const key = target.dataset.isPoint !== undefined ? 'pointId' : 'value';
-    observedTimestamp(item, key, item[key], target.value);
-    item[key] = target.value;
+    observedTimestamp(item, key, item[key], value);
+    item[key] = value;
     if (target.dataset.isValue !== undefined) updateReadingWarning(target);
     updateWireFeedback(renderResult()); queueSave();
     return true;
@@ -1276,6 +1277,7 @@ function bindInputs() {
     if (isReadingInput(target)) {
       updateReadingWarning(target);
       if (readingFormatIssue(target.value)) { event.stopImmediatePropagation(); return; }
+      target.value = target.value.trim();
     }
     if ((target.dataset.inverted !== undefined || target.dataset.isInverted !== undefined) && !editPending) {
       const stationIndex = target.dataset.inverted !== undefined ? Number(target.dataset.station) : parsePair(target.dataset.isInverted)[0];
@@ -1298,6 +1300,12 @@ function bindInputs() {
     const from = String(address.item[address.key] ?? '');
     const to = target.value;
     if (from === to) return;
+    if (isReadingInput(target) && from.trim() === to) {
+      // Normalize only surrounding whitespace without inventing a correction.
+      address.item[address.key] = to;
+      updateWireFeedback(renderResult()); queueSave(true);
+      return;
+    }
     if (!from) return;
     event.stopImmediatePropagation();
     if (address.key === 'fsPointId' && project.setups[address.station] && project.setups[address.station].bs !== '') {

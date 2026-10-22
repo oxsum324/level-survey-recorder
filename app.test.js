@@ -286,3 +286,20 @@ test('A a genuinely different padded reading still requires its correction reaso
   assert.equal(target.value, '1.500');
   assert.equal(h.run('project.auditLog.length'), 0);
 });
+
+test('R2 both generated report HTML variants state the intermediate-sight correction method', async () => {
+  const h = caseWithReading();
+  h.context.testReports = [];
+  h.run(`caseFingerprint = async () => 'a'.repeat(64);
+    showPreview = report => testReports.push(report.innerHTML);
+    document.createElement = () => ({ innerHTML: '', querySelectorAll: () => [] });`);
+  h.node('#previewSheet').append = () => {};
+  h.node('#printPanel').remove = () => {};
+  await h.run('buildSummaryPreview()');
+  await h.run('buildReportPreview()');
+  assert.equal(h.context.testReports.length, 2);
+  for (const html of h.context.testReports) {
+    assert.ok(html.includes('檢核與計算說明：'));
+    assert.ok(html.includes('中間視改正後高程＝改正後儀器視線高 − 中間視讀數；改正後儀器視線高採該測站後視點的改正後高程加後視讀數，不在站內按距離分配。'));
+  }
+});

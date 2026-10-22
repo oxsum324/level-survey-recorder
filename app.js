@@ -1709,6 +1709,8 @@ function printPreparedReport() {
   setTimeout(restore, 3000);
 }
 
+const INTERMEDIATE_ADJUSTMENT_NOTE = '中間視改正後高程＝改正後儀器視線高 − 中間視讀數；改正後儀器視線高採該測站後視點的改正後高程加後視讀數，不在站內按距離分配。';
+
 function printTable(result) {
   return `<table><thead><tr><th>站</th><th>點號</th><th>後視 BS<br>m</th><th>前視 FS<br>m</th><th>中間視 IS<br>m</th><th>觀測時間</th><th>暫算高程<br>m</th><th>改正後高程<br>m</th><th>備註</th></tr></thead><tbody>${resultRows(result)}</tbody></table>`;
 }
@@ -1725,7 +1727,7 @@ async function buildSummaryPreview() {
     <div class="summary-print-checks">${summaryChecks(result)}<span>實測終點 <strong>${formatHeight(result.rawEndHeight)} m</strong></span></div>
     <p>容許值依據：${safe(project.route.toleranceBasis || '未填')}。</p>${arithmeticSummary(result)}${sightBalanceSummary(result)}
     ${result.issues.length ? `<p class="print-alert">待補／檢核事項：${safe(result.issues.join('；'))}</p>` : ''}
-    <p class="print-note">原始讀數、暫算高程與改正後高程分列；改正後高程僅在測線完整且閉合差符合人工指定容許值時產生。本表為單一測線簡易閉合差分配，不代表控制網整體平差。</p>
+    <p class="print-note"><strong>檢核與計算說明：</strong>${INTERMEDIATE_ADJUSTMENT_NOTE}原始讀數、暫算高程與改正後高程分列；改正後高程僅在測線完整且閉合差符合人工指定容許值時產生。本表為單一測線簡易閉合差分配，不代表控制網整體平差。</p>
     <footer>資料指紋 SHA-256：${hash.slice(0, 16)}…｜來源：水準測量現場紀錄 V${VERSION}｜列印日期：${safe(new Date().toLocaleDateString('zh-TW'))}</footer>`;
   showPreview(report, '水準測量成果總表');
 }
@@ -1762,7 +1764,7 @@ async function buildReportPreview() {
     ${arithmeticSummary(result)}${sightBalanceSummary(result)}
     ${project.routeHistory?.length ? `<p>終點變更紀錄：${project.routeHistory.map(item => `${safe(item.at.slice(0, 19))} ${safe(item.from)} → ${safe(item.to)}，原因：${safe(item.reason)}`).join('；')}</p>` : ''}
     ${result.issues.length ? `<p class="print-alert">待補／檢核事項：${safe(result.issues.join('；'))}</p>` : ''}
-    <p class="print-note">原始讀數與暫算高程保留；改正後高程僅在測線完整且閉合差符合輸入容許值時產生。中間視承接所在測站起點累計改正。本表為單一測線簡易閉合差分配，不代表控制網整體平差。</p>
+    <p class="print-note"><strong>檢核與計算說明：</strong>${INTERMEDIATE_ADJUSTMENT_NOTE}原始讀數與暫算高程保留；改正後高程僅在測線完整且閉合差符合輸入容許值時產生。本表為單一測線簡易閉合差分配，不代表控制網整體平差。</p>
     <h2>三、點位照片</h2>${photos || '<p>未附點位照片。</p>'}
     <h2>四、儀器檢校與設備照片</h2>${calibration}${referenceEquipmentPhoto}${equipmentPhotos}${referenceEquipmentPhoto || equipmentPhotos ? '' : '<p>未附設備照片。</p>'}
     <h2>五、開工前檢核</h2><table><thead><tr><th>項目</th><th>紀錄狀態</th></tr></thead><tbody>${project.checklist.items.map(item => `<tr><td>${safe(item.label)}</td><td>${safe({ done: '已執行', pending: '未執行', na: '不適用' }[item.status] || '未選')}</td></tr>`).join('')}</tbody></table><p>檢核備註：${safe(project.checklist.notes || '未填')}</p>

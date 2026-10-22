@@ -1,0 +1,65 @@
+{
+  "whitespaceOnlyNoCorrection": true,
+  "genuineEditStillRequiresReason": true,
+  "malformedStillBlocked": true,
+  "audit": 0,
+  "states": [
+    {
+      "text": "已載入本機案件",
+      "topbarHeight": 67.98664855957031,
+      "viewportWidth": 375,
+      "box": {
+        "left": 251.92750549316406,
+        "right": 350.3053741455078,
+        "top": 1.9942749738693237,
+        "bottom": 21.994276881217957
+      },
+      "textBox": {
+        "left": 252.3187255859375,
+        "right": 350.3053894042969,
+        "top": 1.3835879564285278,
+        "bottom": 22.146947026252747
+      },
+      "overflow": false
+    },
+    {
+      "text": "儲存中",
+      "topbarHeight": 67.98664855957031,
+      "viewportWidth": 375,
+      "box": {
+        "left": 251.92750549316406,
+        "right": 350.3053741455078,
+        "top": 1.9942749738693237,
+        "bottom": 21.994276881217957
+      },
+      "textBox": {
+        "left": 308.31109619140625,
+        "right": 350.3053894042969,
+        "top": 1.3835879564285278,
+        "bottom": 22.146947026252747
+      },
+      "overflow": false
+    },
+    {
+      "text": "已儲存於此裝置",
+      "topbarHeight": 67.98664855957031,
+      "viewportWidth": 375,
+      "box": {
+        "left": 251.92750549316406,
+        "right": 350.3053741455078,
+        "top": 1.9942749738693237,
+        "bottom": 21.994276881217957
+      },
+      "textBox": {
+        "left": 252.3187255859375,
+        "right": 350.3053894042969,
+        "top": 1.3835879564285278,
+        "bottom": 22.146947026252747
+      },
+      "overflow": false
+    }
+  ],
+  "proof": "Three actual UI header snapshots displayed together at 375px; states are sequential, not simultaneous.",
+  "screenshot": "v0.7.1-fix-save-states.png",
+  "sha256": "CFA93BFD3FDCAEB66A6329F2665C2FECB3E0D7EE70654321620A187E0546CA98"
+}

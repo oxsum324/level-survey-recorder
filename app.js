@@ -132,7 +132,7 @@ function queueSave(immediate = false, modified = true, preserveUndo = false) {
   project.updatedAt = stamp();
   if (modified) project.lastModifiedAt = project.updatedAt;
   updateExportState();
-  $('#saveState').textContent = '儲存中…';
+  $('#saveState').textContent = '儲存中';
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     const snapshot = structuredClone(project);

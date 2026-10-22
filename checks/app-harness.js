@@ -10,7 +10,7 @@ import * as pdfPages from '../pdf-pages.js';
 
 // Execute the real application handlers with a small DOM and storage boundary.
 export function appHarness(overrides = {}) {
-  const nodes = new Map(), events = new Map(), messages = [];
+  const nodes = new Map(), events = new Map(), messages = [], listeners = [];
   const node = selector => {
     if (!nodes.has(selector)) nodes.set(selector, {
       value: '', textContent: '', hidden: false, disabled: false, checked: false, dataset: {},
@@ -25,7 +25,7 @@ export function appHarness(overrides = {}) {
     setTimeout: () => 1, clearTimeout() {}, confirm: () => true,
     document: {
       querySelector: node, querySelectorAll: () => [],
-      addEventListener: (type, handler) => { if (!events.has(type)) events.set(type, []); events.get(type).push(handler); },
+      addEventListener: (type, handler, capture = false) => { if (!events.has(type)) events.set(type, []); events.get(type).push(handler); listeners.push({ type, handler, capture }); },
       documentElement: node('html'), body: node('body'),
     },
     window: { addEventListener() {} }, navigator: {}, localStorage: { getItem: () => null, setItem() {} },
@@ -40,6 +40,14 @@ export function appHarness(overrides = {}) {
     notify = message => testMessages.push(message); confirmReplacement = async () => true;`);
   return {
     context, node, run, messages,
+    async dispatch(type, target) {
+      let stopped = false;
+      const event = { target, stopImmediatePropagation() { stopped = true; } };
+      for (const listener of listeners.filter(item => item.type === type).sort((a, b) => Number(b.capture) - Number(a.capture))) {
+        if (stopped) break;
+        await listener.handler(event);
+      }
+    },
     click(dataset) {
       const target = { dataset, closest: () => target };
       for (const handler of events.get('click') || []) handler({ target });

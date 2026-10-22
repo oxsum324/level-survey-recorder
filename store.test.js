@@ -87,3 +87,13 @@ for (const { version, backup } of historicalCases) test(`historical V${version} 
   assert.equal(restored.project.setups[0].intermediate[0].value, '0.500');
   assert.equal(restored.project.setups[0].bsAt, undefined);
 });
+
+test('historical V0.7.0 creation defaults preserve readings, schema and backup format', () => {
+  const { backup, sourceCommit } = JSON.parse(readFileSync(new URL('./checks/fixtures/v070-case.json', import.meta.url), 'utf8'));
+  assert.equal(sourceCommit, 'bde44a2de9c5ee8af612c2c6dd76a73c4f13a1f9');
+  const restored = parseBackup(JSON.stringify(backup));
+  assert.equal(restored.project.appVersion, '0.7.0');
+  assert.equal(restored.project.schema, 1);
+  assert.deepEqual(restored.project.setups, backup.project.setups);
+  assert.equal(restored.project.setups[0].bsAt, undefined);
+});

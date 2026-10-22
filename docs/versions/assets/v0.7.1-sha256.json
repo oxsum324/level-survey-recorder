@@ -1,0 +1,77 @@
+[
+  {
+    "label": "改前：案件",
+    "file": "v0.7.1-before-route.png",
+    "sha256": "6F05626D12EAC2F2B367B4DFCF382EA7157BC444ADE8D0C991482937FB8E0DFE"
+  },
+  {
+    "label": "改後：案件",
+    "file": "v0.7.1-after-route.png",
+    "sha256": "9F5B72C6B32C48A43CD2A83BBEDE807274F6629875106C968CA320E110D6D163"
+  },
+  {
+    "label": "改前：觀測",
+    "file": "v0.7.1-before-measure.png",
+    "sha256": "C9333B5AED297309F81C8BDE8A488C397122989191058233CDE7B67183446DD9"
+  },
+  {
+    "label": "改後：觀測",
+    "file": "v0.7.1-after-measure.png",
+    "sha256": "6E648FB1F4D3BEA5CCDD1651370370B15A5D2D565B0DF49B184250AA63EA4C7C"
+  },
+  {
+    "label": "改前：成果",
+    "file": "v0.7.1-before-result.png",
+    "sha256": "B117DB4393CF43620872B97E72FAB94344BDAB48398D185045571EBC3633E796"
+  },
+  {
+    "label": "改後：成果",
+    "file": "v0.7.1-after-result.png",
+    "sha256": "ACBB0A5B63359AAA8CD5DED8B35D2F61CA5595A761D6352AF93F44158A26F304"
+  },
+  {
+    "label": "改前：強光",
+    "file": "v0.7.1-before-sunlight.png",
+    "sha256": "1C0A39421D4482026485FD1D3306D1E4E6FA70F8105279BB3A590C1E060EB16F"
+  },
+  {
+    "label": "改後：強光",
+    "file": "v0.7.1-after-sunlight.png",
+    "sha256": "3988E26D2C74ECD993B0090217BD2AD89C0F16BD497C51FB5C65746A5B7A5A46"
+  },
+  {
+    "label": "格式警示",
+    "file": "v0.7.1-format-warning.png",
+    "sha256": "B32D601E5BEAB21072395AE30417161112F9F7B9010F8345AD83A2F599F02776"
+  },
+  {
+    "label": "更正對話框",
+    "file": "v0.7.1-correction.png",
+    "sha256": "AE59EEEDE6E040B605065779E37183F674B6B3EE0D39E94A799FD0AD7430CB00"
+  },
+  {
+    "label": "離線重新開啟",
+    "file": "v0.7.1-offline.png",
+    "sha256": "2DE87C3B90832E5DDEB05DA98B0294ECE00AB8ED2747AC23780FE41BF9733878"
+  },
+  {
+    "label": "PDF 預覽",
+    "file": "v0.7.1-report-preview.png",
+    "sha256": "339FDC7F4C20C5DEE183C695BF5C32658DDA95DF7F8589A439D6E50F51F6A380"
+  },
+  {
+    "label": "本版 PDF 第 1 頁（測試用）",
+    "file": "v0.7.1-pdf-1.png",
+    "sha256": "47BD20152A693FAD435E8C30E858B55F23BE2CBB9FE4D2F9D13D219030AB1354"
+  },
+  {
+    "label": "本版 PDF 第 2 頁（測試用）",
+    "file": "v0.7.1-pdf-2.png",
+    "sha256": "7F7B14E2196C0AA875B8BE107C905CE872C532A59F7F12EDFA13B0347C87AAB1"
+  },
+  {
+    "label": "同一報告套回舊版 CSS 第 1 頁",
+    "file": "v0.7.1-baseline-pdf-1.png",
+    "sha256": "D1631553057C83D898B8C96146C31C16FCDD23DFED96D2E7A9D95163B94E33DF"
+  }
+]

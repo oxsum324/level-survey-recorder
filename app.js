@@ -1,4 +1,4 @@
-import { buildSummaryCsv, calculate, formatHeight, formatMm, formatObservationTime, formulaToleranceMm, readingIssue, suggestMmCorrection, twoPegCheck, VERSION } from './calc.js';
+import { buildSummaryCsv, calculate, formatHeight, formatMm, formatObservationTime, formulaToleranceMm, readingFormatIssue, readingIssue, suggestMmCorrection, twoPegCheck, VERSION } from './calc.js';
 import { loadProject, saveProject, saveMedia, loadMedia, deleteMedia, replaceProject, makeBackup, parseBackup } from './store.js';
 import { resolveObservedEdit, actionEntry, pointDeletionEntry, auditReportEntry } from './audit.js';
 import { fingerprint, sha256Blob } from './integrity.js';
@@ -10,7 +10,7 @@ const $ = selector => document.querySelector(selector);
 const uid = () => crypto.randomUUID();
 const safe = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const validPosition = value => value && Number.isFinite(value.x) && Number.isFinite(value.y) && value.x >= 0 && value.x <= 100 && value.y >= 0 && value.y <= 100;
-const decimals = 'type="text" inputmode="decimal" autocomplete="off"';
+const decimals = 'type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off"';
 const validReading = value => /^\d+(?:[.,]\d{1,5})?$/.test(String(value ?? '').trim());
 const DEFAULT_INSTRUMENT = 'PENTAX AP-128';
 const photoUrls = new Map();
@@ -79,6 +79,7 @@ function code(id) { return point(id)?.code || '未指定'; }
 function notify(message, danger = false) {
   const inline = !$('#measurePanel')?.hidden ? $('#measureNotice') : null;
   const box = inline || $('#message');
+  box.setAttribute('aria-live', danger ? 'assertive' : 'polite');
   box.textContent = message;
   box.className = danger ? 'danger' : '';
   box.hidden = false;
@@ -131,7 +132,7 @@ function queueSave(immediate = false, modified = true, preserveUndo = false) {
   project.updatedAt = stamp();
   if (modified) project.lastModifiedAt = project.updatedAt;
   updateExportState();
-  $('#saveState').textContent = '儲存中…';
+  $('#saveState').textContent = '儲存中';
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     const snapshot = structuredClone(project);
@@ -216,6 +217,7 @@ function editReason(context) {
   $('#editReasonChoice').value = '讀錯重讀';
   $('#editReasonOther').value = '';
   dialog.showModal();
+  $('#editReasonChoice').focus();
   return new Promise(resolve => {
     const done = value => { dialog.close(); $('#saveEditReason').removeEventListener('click', save); $('#cancelEditReason').removeEventListener('click', cancel); dialog.removeEventListener('cancel', onCancel); resolve(value); };
     const save = () => {
@@ -229,6 +231,14 @@ function editReason(context) {
     $('#cancelEditReason').addEventListener('click', cancel);
     dialog.addEventListener('cancel', onCancel);
   });
+}
+
+function editPreview(address, from, to) {
+  const labels = { bs: '後視', fs: '前視', value: '中間視', bsUpper: '後視上絲', bsLower: '後視下絲', fsUpper: '前視上絲', fsLower: '前視下絲', upper: '中間視上絲', lower: '中間視下絲', distance: '測線長度', pointId: '中間視點位', fsPointId: '前視點位' };
+  const pointField = address.key === 'pointId' || address.key === 'fsPointId';
+  const inverted = address.key.startsWith('bs') ? address.item.bsInverted : address.key.startsWith('fs') ? address.item.fsInverted : address.item.inverted;
+  const display = value => pointField ? code(value) : value === '' ? '空白' : `${value} m`;
+  return `第 ${address.station} 站 ${address.pointCode} 點 ‧ ${labels[address.key] || address.key}${inverted && address.key !== 'distance' && !pointField ? '（倒尺）' : ''}：${display(from)} → ${display(to)}`;
 }
 
 function readingAddress(target) {
@@ -421,14 +431,20 @@ function synchronizeSetups() {
   });
 }
 
+function isReadingInput(input) {
+  return input.dataset.reading !== undefined || input.dataset.wireField !== undefined
+    || input.dataset.isWire !== undefined || /^peg[A-B][12]$/.test(input.id);
+}
+
 function updateReadingWarning(input) {
-  const station = Number(input.closest('[data-station]')?.dataset.station ?? project.setups.length - 1);
+  const address = readingAddress(input);
+  const station = address ? address.station - 1 : Number(input.closest('[data-station]')?.dataset.station ?? project.setups.length - 1);
   const setup = project.setups[station];
   const sight = input.dataset.isValue !== undefined ? setup?.intermediate[parsePair(input.dataset.isValue)[1]] : null;
   const role = sight ? '中間視' : input.id === 'nextReading' ? ($('#nextRole').value === 'IS' ? '中間視' : '前視') : input.dataset.field === 'bs' ? '後視' : '前視';
   const pointId = sight?.pointId || (input.id === 'nextReading' ? $('#nextPoint').value : input.dataset.field === 'bs' ? setup?.bsPointId : setup?.fsPointId);
   const length = Number(String(project.route.staffLengthM ?? '5').replace(',', '.'));
-  const issue = Number.isFinite(length) && length > 0 ? readingIssue(input.value, length, station + 1, role, code(pointId)) : null;
+  const issue = readingFormatIssue(input.value) || (Number.isFinite(length) && length > 0 ? readingIssue(input.value, length, station + 1, role, address?.pointCode || code(pointId)) : null);
   const warning = input.closest('.reading-value')?.querySelector('.reading-warning');
   input.classList.toggle('reading-invalid', !!issue);
   input.setAttribute('aria-invalid', String(!!issue));
@@ -459,7 +475,7 @@ function applyMmCorrection(input, correction) {
 }
 
 function updateReadingWarnings() {
-  document.querySelectorAll('[data-reading]').forEach(updateReadingWarning);
+  document.querySelectorAll('[data-reading], [data-wire-field], [data-is-wire]').forEach(updateReadingWarning);
 }
 
 function wireFields(setup, index, role, sightIndex = null) {
@@ -469,7 +485,7 @@ function wireFields(setup, index, role, sightIndex = null) {
   const attr = key => sightIndex === null ? `data-wire-field="${key}" data-station="${index}"` : `data-is-wire="${index}:${sightIndex}:${key}"`;
   const check = sightIndex === null ? `${index}:${role}` : `${index}:is:${sightIndex}`;
   const pointCode = code(sightIndex === null ? setup[role === 'bs' ? 'bsPointId' : 'fsPointId'] : item.pointId);
-  return `<details class="wire-details"><summary>上絲／下絲（選填）</summary><div class="wire-fields"><div><label>上絲（m）<input ${decimals} ${attr(upperKey)} value="${safe(item[upperKey])}" placeholder="0.000"></label>${correctionNote(index + 1, pointCode, upperKey)}</div><div><label>下絲（m）<input ${decimals} ${attr(lowerKey)} value="${safe(item[lowerKey])}" placeholder="0.000"></label>${correctionNote(index + 1, pointCode, lowerKey)}</div></div><p class="wire-check" data-wire-check="${check}" hidden></p></details>`;
+  return `<details class="wire-details"><summary>上絲／下絲（選填）</summary><div class="wire-fields"><div class="reading-value"><label>上絲（m）<input ${decimals} ${attr(upperKey)} value="${safe(item[upperKey])}" placeholder="0.000"></label><small class="reading-warning" hidden></small>${correctionNote(index + 1, pointCode, upperKey)}</div><div class="reading-value"><label>下絲（m）<input ${decimals} ${attr(lowerKey)} value="${safe(item[lowerKey])}" placeholder="0.000"></label><small class="reading-warning" hidden></small>${correctionNote(index + 1, pointCode, lowerKey)}</div></div><p class="wire-check" data-wire-check="${check}" hidden></p></details>`;
 }
 
 function correctionNote(station, pointCode, field) {
@@ -501,6 +517,10 @@ function updateWireFeedback(result = calculate(project)) {
 }
 
 function renderStations() {
+  const routeSummary = $('#routeSummary');
+  const pointActions = $('#measurePointActions');
+  // Reuse these nodes so reading rerenders keep every bound control and ID.
+  routeSummary?.remove(); pointActions?.remove();
   synchronizeSetups();
   const computed = calculate(project);
   ensureNextPoint();
@@ -516,14 +536,14 @@ function renderStations() {
       <div class="reading-value"><label>讀數（m）<input ${decimals} data-reading data-field="fs" data-station="${index}" value="${safe(setup.fs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="fsInverted" data-station="${index}" ${setup.fsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(setup.fsPointId), 'fs')}${correctionNote(index + 1, code(setup.fsPointId), 'fsInverted')}</div>
       <small class="raw-height">暫算高程 ${formatHeight(computed.stations[index]?.rawEndHeight)} m（未改正）</small><div class="reading-actions"><button type="button" data-field-map="${safe(setup.fsPointId)}">標圖</button>${active ? `<button type="button" data-convert-fs="${index}" class="quiet">改為中間視</button>` : ''}</div>${wireFields(setup, index, 'fs')}</div>` : '');
     return `<section class="card station ${active ? 'active-station' : ''}" data-station="${index}">
-      <div class="station-head"><h3>測站 ${index + 1} <small>由 ${safe(code(setup.bsPointId))} 後視</small></h3><button type="button" data-remove-station="${index}" class="quiet danger-text" title="刪除此站及後續站">刪除</button></div>
+      <div class="station-head"><div class="station-heading"><h3>測站 ${index + 1}</h3></div></div>
       <div class="bs-entry reading-value"><label>後視 BS · ${safe(code(setup.bsPointId))}<input ${decimals} data-reading data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="bsInverted" data-station="${index}" ${setup.bsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(setup.bsPointId), 'bs')}${correctionNote(index + 1, code(setup.bsPointId), 'bsInverted')}</div>
       ${wireFields(setup, index, 'bs')}
       ${waitingForNext ? `<div class="next-reading"><div class="next-point-label">下一點</div><div class="next-point-line"><button type="button" data-cycle-point="-1" aria-label="前一個點位">‹</button><button type="button" id="nextPointPicker" aria-haspopup="dialog">${safe(code(draftNextPointId))} · ${observedPointIds().has(draftNextPointId) ? '已觀測／回測' : '未觀測'} ▾</button><button type="button" data-cycle-point="1" aria-label="後一個點位">›</button><input type="hidden" id="nextPoint" value="${safe(draftNextPointId)}"></div>
-        <div class="next-value-line"><label>讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 · 同站</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視 · 換站</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>前視 · 終點</option></select></label><div class="reading-value"><label>讀數（m）<input id="nextReading" data-reading ${decimals} value="${safe(draftNextValue)}" placeholder="0.000"></label><label class="inverted-toggle"><input id="nextInverted" type="checkbox" ${draftNextInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div></div>
+        <div class="next-value-line"><label>讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 · 同站</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視 · 換站</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>前視 · 終點</option></select></label><div class="reading-value"><label>讀數（m）<input id="nextReading" data-reading ${decimals.replace('enterkeyhint="next"', 'enterkeyhint="done"')} value="${safe(draftNextValue)}" placeholder="0.000"></label><label class="inverted-toggle"><input id="nextInverted" type="checkbox" ${draftNextInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div></div>
         <button type="button" data-add-next="${index}" class="primary record-next">記錄此點</button></div>` : ''}
       <details class="station-records"><summary>${setup.fsPointId ? `前視 ${safe(code(setup.fsPointId))} · ${safe(setup.fs)} m` : `本站已記錄 ${(setup.intermediate || []).length} 點`} · 點開核對</summary>
-        <div class="reading-actions"><button type="button" data-field-map="${safe(setup.bsPointId)}">標註 ${safe(code(setup.bsPointId))}</button></div>${recorded}
+        <div class="reading-actions"><button type="button" data-field-map="${safe(setup.bsPointId)}">標註 ${safe(code(setup.bsPointId))}</button><button type="button" data-remove-station="${index}" class="quiet danger-text" title="刪除此站及後續站">刪除此站及後續站</button></div>${recorded}
         <div class="station-distance"><label>測線長度（m，按距離分配時填）<input ${decimals} data-field="distance" data-station="${index}" value="${safe(setup.distance)}" placeholder="例如 35.0"></label>${correctionNote(index + 1, code(setup.fsPointId), 'distance')}</div>
         <p class="wire-station-summary" data-wire-station="${index}" hidden></p><button type="button" data-copy-wire-distance="${index}" disabled>由後視距＋前視距帶入本站長度</button>
       </details>
@@ -531,6 +551,13 @@ function renderStations() {
   };
   const previous = project.setups.slice(0, -1);
   $('#stationList').innerHTML = (project.setups.length ? card(project.setups.at(-1), project.setups.length - 1) : '') + (previous.length ? `<details class="history"><summary>前 ${previous.length} 站 · 核對與更正</summary>${previous.map(card).join('')}</details>` : '');
+  const activeCard = $('#stationList .active-station');
+  if (routeSummary) (activeCard?.querySelector('.station-heading') || $('#measureActions')).append(routeSummary);
+  if (pointActions) {
+    const bsEntry = activeCard?.querySelector('.bs-entry');
+    if (bsEntry) bsEntry.after(pointActions);
+    else $('#stationList').before(pointActions);
+  }
   const last = project.setups.at(-1);
   $('#addStation').hidden = !!last && (!last.fsPointId || last.fsPointId === project.route.endId);
   $('#addStation').textContent = !last ? `開始第一站：後視 ${code(project.route.startId)}` : `搬站：於 ${code(last.fsPointId)} 讀後視`;
@@ -1111,26 +1138,27 @@ function parsePair(pair) { return pair.split(':').map(Number); }
 
 function handleStationInput(event) {
   const target = event.target;
+  const value = isReadingInput(target) ? target.value.trim() : target.value;
   if (target.dataset.wireField !== undefined) {
     const item = project.setups[Number(target.dataset.station)], key = target.dataset.wireField;
-    observedTimestamp(item, key, item[key], target.value); item[key] = target.value;
+    observedTimestamp(item, key, item[key], value); item[key] = value;
     updateWireFeedback(renderResult()); queueSave(); return true;
   }
   if (target.dataset.isWire !== undefined) {
     const [station, sight, key] = target.dataset.isWire.split(':');
     const item = project.setups[Number(station)].intermediate[Number(sight)];
-    observedTimestamp(item, key, item[key], target.value); item[key] = target.value;
+    observedTimestamp(item, key, item[key], value); item[key] = value;
     updateWireFeedback(renderResult()); queueSave(); return true;
   }
   if (target.dataset.field !== undefined) {
     const index = Number(target.dataset.station);
-    if (target.dataset.field === 'fsPointId' && index + 1 < project.setups.length && project.setups[index + 1].bs !== '' && target.value !== project.setups[index].fsPointId) {
+    if (target.dataset.field === 'fsPointId' && index + 1 < project.setups.length && project.setups[index + 1].bs !== '' && value !== project.setups[index].fsPointId) {
       target.value = project.setups[index].fsPointId;
       notify('下一站已有後視讀數；不可直接改動本轉點。請先移除後續測站再修改。', true);
       return true;
     }
-    observedTimestamp(project.setups[index], target.dataset.field, project.setups[index][target.dataset.field], target.value);
-    project.setups[index][target.dataset.field] = target.value;
+    observedTimestamp(project.setups[index], target.dataset.field, project.setups[index][target.dataset.field], value);
+    project.setups[index][target.dataset.field] = value;
     if (target.dataset.reading !== undefined) updateReadingWarning(target);
     if (target.dataset.field === 'fsPointId') renderStations();
     else { updateWireFeedback(renderResult()); queueSave(); }
@@ -1141,8 +1169,8 @@ function handleStationInput(event) {
     const [station, sight] = parsePair(target.dataset.isPoint ?? target.dataset.isValue);
     const item = project.setups[station].intermediate[sight];
     const key = target.dataset.isPoint !== undefined ? 'pointId' : 'value';
-    observedTimestamp(item, key, item[key], target.value);
-    item[key] = target.value;
+    observedTimestamp(item, key, item[key], value);
+    item[key] = value;
     if (target.dataset.isValue !== undefined) updateReadingWarning(target);
     updateWireFeedback(renderResult()); queueSave();
     return true;
@@ -1151,6 +1179,11 @@ function handleStationInput(event) {
 }
 
 function bindInputs() {
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.target.id !== 'nextReading' || event.isComposing || event.repeat || editPending) return;
+    event.preventDefault();
+    $('#stationList .active-station [data-add-next]')?.click();
+  });
   document.addEventListener('focusin', event => {
     const address = readingAddress(event.target);
     if (address) {
@@ -1162,6 +1195,11 @@ function bindInputs() {
   document.addEventListener('input', event => {
     const target = event.target;
     if (target.id === 'pointSearch') { renderPointPicker(); return; }
+    if (target.id === 'nextReading') clearUndo();
+    if (isReadingInput(target)) {
+      updateReadingWarning(target);
+      if (readingFormatIssue(target.value)) { event.stopImmediatePropagation(); return; }
+    }
     const address = readingAddress(target);
     if (address && (entryStart.get(target) ?? String(address.item[address.key] ?? '')) !== '' && String(address.item[address.key]) !== target.value) {
       updateReadingWarning(target);
@@ -1235,6 +1273,12 @@ function bindInputs() {
   });
   document.addEventListener('change', async event => {
     const target = event.target;
+
+    if (isReadingInput(target)) {
+      updateReadingWarning(target);
+      if (readingFormatIssue(target.value)) { event.stopImmediatePropagation(); return; }
+      target.value = target.value.trim();
+    }
     if ((target.dataset.inverted !== undefined || target.dataset.isInverted !== undefined) && !editPending) {
       const stationIndex = target.dataset.inverted !== undefined ? Number(target.dataset.station) : parsePair(target.dataset.isInverted)[0];
       const sightIndex = target.dataset.isInverted !== undefined ? parsePair(target.dataset.isInverted)[1] : null;
@@ -1256,6 +1300,12 @@ function bindInputs() {
     const from = String(address.item[address.key] ?? '');
     const to = target.value;
     if (from === to) return;
+    if (isReadingInput(target) && from.trim() === to) {
+      // Normalize only surrounding whitespace without inventing a correction.
+      address.item[address.key] = to;
+      updateWireFeedback(renderResult()); queueSave(true);
+      return;
+    }
     if (!from) return;
     event.stopImmediatePropagation();
     if (address.key === 'fsPointId' && project.setups[address.station] && project.setups[address.station].bs !== '') {
@@ -1263,7 +1313,7 @@ function bindInputs() {
     }
     editPending = true;
     const pointField = address.key === 'pointId' || address.key === 'fsPointId';
-    const reason = await editReason(`第 ${address.station} 站 ${address.pointCode}：${pointField ? code(from) : from} → ${pointField ? code(to) : to}`);
+    const reason = await editReason(editPreview(address, from, to));
     const result = resolveObservedEdit({ from, to, reason, station: address.station, pointCode: address.pointCode, field: address.key, at: stamp(), id: uid() });
     if (result.accepted) {
       address.item[address.key] = result.value;
@@ -1330,8 +1380,8 @@ function bindActions() {
       if (index !== project.setups.length - 1 || setup.fsPointId) return;
       if (!validReading(setup.bs)) { notify('請先填妥本測站的後視 BS。', true); return; }
       if (updateReadingWarning($(`[data-field="bs"][data-station="${index}"]`))) return;
-      if (!point(pointId) || !validReading(value)) { notify('請選擇下一個點位並填入有效讀數。', true); return; }
       if (updateReadingWarning($('#nextReading'))) return;
+      if (!point(pointId) || !validReading(value)) { notify('請選擇下一個點位並填入有效讀數。', true); return; }
       if (role === 'FINISH' && pointId !== project.route.endId) { notify(`終點前視須選預定終點 ${code(project.route.endId)}。`, true); return; }
       if (role === 'MOVE' && pointId === project.route.endId) { notify('已到預定終點，請選「終點前視」。', true); return; }
       if (role === 'IS' && pointId === project.route.endId) { notify('預定終點應記為前視 FS。', true); return; }

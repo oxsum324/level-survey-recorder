@@ -1,0 +1,16 @@
+{
+  "beforeHexUnique": 136,
+  "afterHexUnique": 12,
+  "beforeNonPrintHexUnique": 133,
+  "afterNonPrintHexUnique": 3,
+  "baseRgbPalettes": 17,
+  "printBlocksUnchanged": 6,
+  "beforeEnterkeyhintLines": 0,
+  "afterEnterkeyhintLines": 2,
+  "staticIdsRetained": 162,
+  "staticIdsUnique": true,
+  "cspUnchanged": true,
+  "swOnlyCacheVersion": true,
+  "storeUnchanged": true,
+  "integrityUnchanged": true
+}

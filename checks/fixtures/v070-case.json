@@ -1,0 +1,141 @@
+{
+  "sourceCommit": "bde44a2de9c5ee8af612c2c6dd76a73c4f13a1f9",
+  "backup": {
+    "format": "level-survey-case.v1",
+    "project": {
+      "schema": 1,
+      "appVersion": "0.7.0",
+      "id": "a25c5073-3936-465d-9f59-28d55f1ae507",
+      "name": "",
+      "number": "",
+      "date": "2026-10-22",
+      "observer": "",
+      "rodHolder": "",
+      "photographer": "",
+      "instrument": "PENTAX AP-128",
+      "instrumentDefaultApplied": true,
+      "datum": "",
+      "approxLocation": "",
+      "points": [
+        {
+          "id": "6c4cedcb-ab87-49f9-93e4-dc6fee450631",
+          "code": "BM1",
+          "type": "BM",
+          "description": "",
+          "position": null
+        },
+        {
+          "id": "legacy-s1",
+          "code": "S1",
+          "type": "S",
+          "description": "",
+          "position": null
+        }
+      ],
+      "pointPlan": {
+        "sCount": "0",
+        "tpCount": "0"
+      },
+      "mapMediaId": null,
+      "mapSource": "",
+      "photos": [],
+      "equipmentPhotos": [],
+      "route": {
+        "startId": "6c4cedcb-ab87-49f9-93e4-dc6fee450631",
+        "endId": "6c4cedcb-ab87-49f9-93e4-dc6fee450631",
+        "startHeight": "10.000",
+        "startHeightKind": "assumed",
+        "endHeight": "",
+        "toleranceMm": "",
+        "toleranceBasis": "",
+        "formulaC": "",
+        "staffLengthM": "5",
+        "stadiaConstantK": "100",
+        "threeWireToleranceMm": "",
+        "adjustMethod": "stations"
+      },
+      "instrumentCheck": {
+        "serial": "",
+        "calibrationDate": "",
+        "calibrationAgency": "",
+        "twoPeg": {
+          "a1": "",
+          "b1": "",
+          "a2": "",
+          "b2": "",
+          "distanceM": ""
+        }
+      },
+      "setups": [
+        {
+          "bsPointId": "6c4cedcb-ab87-49f9-93e4-dc6fee450631",
+          "bs": "1.000",
+          "intermediate": [
+            {
+              "pointId": "legacy-s1",
+              "value": "0.500"
+            }
+          ],
+          "fsPointId": "6c4cedcb-ab87-49f9-93e4-dc6fee450631",
+          "fs": "1.000",
+          "distance": ""
+        }
+      ],
+      "routeHistory": [],
+      "auditLog": [],
+      "environment": {
+        "weather": "",
+        "weatherOther": "",
+        "temperature": "",
+        "start": "",
+        "end": "",
+        "notes": ""
+      },
+      "checklist": {
+        "items": [
+          {
+            "label": "圓水準器（氣泡）檢查",
+            "status": ""
+          },
+          {
+            "label": "兩樁法檢驗",
+            "status": ""
+          },
+          {
+            "label": "水準尺零點、接頭與刻劃檢查",
+            "status": ""
+          },
+          {
+            "label": "尺墊準備（轉點使用）",
+            "status": ""
+          },
+          {
+            "label": "前後視距大致相等的站位規劃",
+            "status": ""
+          },
+          {
+            "label": "避開熱閃爍明顯的時段",
+            "status": ""
+          },
+          {
+            "label": "視線不要貼近地面",
+            "status": ""
+          },
+          {
+            "label": "扶尺人員前後擺尺，取最小讀數",
+            "status": ""
+          },
+          {
+            "label": "使用兩支尺時，測站數取偶數",
+            "status": ""
+          }
+        ],
+        "notes": ""
+      },
+      "updatedAt": "2026-10-22T08:38:52.563Z",
+      "lastModifiedAt": "2026-10-22T08:38:52.563Z",
+      "lastExportedAt": ""
+    },
+    "media": []
+  }
+}

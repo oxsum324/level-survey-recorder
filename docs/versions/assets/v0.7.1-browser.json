@@ -1,0 +1,347 @@
+{
+  "normal": {
+    "topbar": 67.98664855957031,
+    "tabs": 44.60878372192383,
+    "firstReading": 216.1832275390625,
+    "overflow": false,
+    "targets": [
+      {
+        "id": "sunlightToggle",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "BUTTON",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "active",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "BUTTON",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "BUTTON",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "wake-toggle",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "undoLast",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "SUMMARY",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "INPUT",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 16
+      },
+      {
+        "id": "quickBM",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "quickS",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "quickTP",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "openDeletePoint",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "BUTTON",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 22
+      },
+      {
+        "id": "nextPointPicker",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      },
+      {
+        "id": "BUTTON",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 22
+      },
+      {
+        "id": "nextRole",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 16
+      },
+      {
+        "id": "nextReading",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 16
+      },
+      {
+        "id": "primary record-next",
+        "minHeight": 44,
+        "height": 43.99809646606445,
+        "font": 14
+      }
+    ]
+  },
+  "sunlight": {
+    "topbar": 71.9847412109375,
+    "tabs": 48.606876373291016,
+    "firstReading": 229.3988800048828,
+    "overflow": false,
+    "targets": [
+      {
+        "id": "sunlightToggle",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "BUTTON",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "active",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "BUTTON",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "BUTTON",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "wake-toggle",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "undoLast",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "SUMMARY",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "INPUT",
+        "minHeight": 54,
+        "height": 57.9007682800293,
+        "font": 30
+      },
+      {
+        "id": "quickBM",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "quickS",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "quickTP",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "openDeletePoint",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "BUTTON",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 22
+      },
+      {
+        "id": "nextPointPicker",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      },
+      {
+        "id": "BUTTON",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 22
+      },
+      {
+        "id": "nextRole",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 16
+      },
+      {
+        "id": "nextReading",
+        "minHeight": 54,
+        "height": 57.9007682800293,
+        "font": 30
+      },
+      {
+        "id": "primary record-next",
+        "minHeight": 48,
+        "height": 47.99618911743164,
+        "font": 14
+      }
+    ]
+  },
+  "hints": [
+    {
+      "id": "startHeight",
+      "hint": "next"
+    },
+    {
+      "id": "endHeight",
+      "hint": "next"
+    },
+    {
+      "id": "toleranceMm",
+      "hint": "next"
+    },
+    {
+      "id": "staffLengthM",
+      "hint": "next"
+    },
+    {
+      "id": "formulaC",
+      "hint": "next"
+    },
+    {
+      "id": "stadiaConstantK",
+      "hint": "next"
+    },
+    {
+      "id": "threeWireToleranceMm",
+      "hint": "next"
+    },
+    {
+      "id": "bs",
+      "hint": "next"
+    },
+    {
+      "id": "bsUpper",
+      "hint": "next"
+    },
+    {
+      "id": "bsLower",
+      "hint": "next"
+    },
+    {
+      "id": "nextReading",
+      "hint": "done"
+    },
+    {
+      "id": "0:0",
+      "hint": "next"
+    },
+    {
+      "id": "0:0:upper",
+      "hint": "next"
+    },
+    {
+      "id": "0:0:lower",
+      "hint": "next"
+    },
+    {
+      "id": "distance",
+      "hint": "next"
+    },
+    {
+      "id": "pegA1",
+      "hint": "next"
+    },
+    {
+      "id": "pegB1",
+      "hint": "next"
+    },
+    {
+      "id": "pegA2",
+      "hint": "next"
+    },
+    {
+      "id": "pegB2",
+      "hint": "next"
+    },
+    {
+      "id": "pegDistanceM",
+      "hint": "next"
+    },
+    {
+      "id": "envTemperature",
+      "hint": "next"
+    }
+  ],
+  "malformedInputPreserved": true,
+  "correctionPreviewAndFocus": true,
+  "escapeRestores": true,
+  "sameValueNoDialog": true,
+  "helpAndWake": true,
+  "enterRecords": true,
+  "wireFormat": true,
+  "reducedMotion": true,
+  "pdfDownload": true,
+  "source": {
+    "bs": "1.500",
+    "audit": 0
+  },
+  "audit": 0,
+  "diagnostics": []
+}

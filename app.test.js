@@ -303,3 +303,73 @@ test('R2 both generated report HTML variants state the intermediate-sight correc
     assert.ok(html.includes('中間視改正後高程＝改正後儀器視線高 − 中間視讀數；改正後儀器視線高採該測站後視點的改正後高程加後視讀數，不在站內按距離分配。'));
   }
 });
+
+function sampleLoaderHarness() {
+  const h = caseWithReading();
+  h.context.AbortController = AbortController;
+  h.run(`globalThis.sampleContents = JSON.stringify({ format: 'level-survey-case.v1', project: { ...blankProject(), name: '合成測試案件' }, media: [] });`);
+  h.context.fetch = async () => ({ ok: true, text: async () => h.context.sampleContents });
+  return h;
+}
+
+test('sample loading cancellation retains the case and undo, and uses the shared backup confirmation', async () => {
+  const h = sampleLoaderHarness();
+  h.click({ removeIs: '0:0' });
+  const before = h.run('JSON.stringify(project)');
+  let confirmations = 0, replacements = 0;
+  h.context.confirmReplacement = async alwaysConfirm => { assert.equal(alwaysConfirm, true); confirmations++; return false; };
+  h.context.replaceProject = async () => { replacements++; };
+  await h.node('#loadTestCase').onclick();
+  assert.equal(confirmations, 1);
+  assert.equal(replacements, 0);
+  assert.equal(h.run('JSON.stringify(project)'), before);
+  assert.equal(h.node('#undoLast').disabled, false);
+  assert.equal(h.node('#loadTestCase').disabled, false);
+});
+
+test('sample download and parse failures preserve the case before replacement confirmation', async () => {
+  for (const kind of ['network', 'http', 'parse']) {
+    const h = sampleLoaderHarness();
+    const before = h.run('JSON.stringify(project)');
+    let confirmations = 0, replacements = 0;
+    h.context.confirmReplacement = async () => { confirmations++; return true; };
+    h.context.replaceProject = async () => { replacements++; };
+    h.context.fetch = async () => {
+      if (kind === 'network') throw new Error('離線');
+      return { ok: kind !== 'http', status: 404, text: async () => 'not JSON' };
+    };
+    await h.node('#loadTestCase').onclick();
+    assert.equal(confirmations, 0);
+    assert.equal(replacements, 0);
+    assert.equal(h.run('JSON.stringify(project)'), before);
+    assert.equal(h.node('#loadTestCase').disabled, false);
+    assert.match(h.messages.at(-1), /失敗/);
+  }
+});
+
+test('sample loading replaces only after confirmation and clears undo through normal import', async () => {
+  const h = sampleLoaderHarness();
+  h.click({ removeIs: '0:0' });
+  const order = [];
+  h.context.confirmReplacement = async () => { order.push('confirm'); return true; };
+  h.context.replaceProject = async () => { order.push('replace'); };
+  h.context.switchTab = tab => order.push(tab);
+  await h.node('#loadTestCase').onclick();
+  assert.deepEqual(order, ['confirm', 'replace', 'result']);
+  assert.equal(h.run('project.name'), '合成測試案件');
+  assert.equal(h.node('#undoLast').disabled, true);
+  assert.equal(h.node('#loadTestCase').textContent, '載入測試案件');
+});
+
+test('repeated sample clicks do not start parallel downloads', async () => {
+  const h = sampleLoaderHarness();
+  let resolveFetch, calls = 0;
+  h.context.fetch = () => { calls++; return new Promise(resolve => { resolveFetch = resolve; }); };
+  const pending = h.node('#loadTestCase').onclick();
+  await h.node('#loadTestCase').onclick();
+  assert.equal(calls, 1);
+  assert.equal(h.node('#loadTestCase').disabled, true);
+  resolveFetch({ ok: false, status: 503 });
+  await pending;
+  assert.equal(h.node('#loadTestCase').disabled, false);
+});

@@ -930,8 +930,8 @@ function hasCaseRecords() {
     || project.photos.length > 0 || project.equipmentPhotos.length > 0 || !!project.mapMediaId;
 }
 
-async function confirmReplacement() {
-  if (!hasCaseRecords()) return true;
+async function confirmReplacement(alwaysConfirm = false) {
+  if (!alwaysConfirm && !hasCaseRecords()) return true;
   const dialog = $('#replaceDialog');
   dialog.returnValue = 'cancel';
   const action = await new Promise(resolve => {
@@ -1048,12 +1048,12 @@ async function mergePhotoBackup(file) {
   } catch (error) { notify(`合併失敗：${error.message}`, true); }
 }
 
-async function importBackup(file) {
+async function importBackup(file, alwaysConfirm = false) {
   if (!file) return;
   try {
     const contents = await file.text();
     const restored = parseBackup(contents);
-    if (!await confirmReplacement()) return;
+    if (!await confirmReplacement(alwaysConfirm)) return;
     clearTimeout(saveTimer);
     await saveQueue;
     await replaceProject(restored.project, restored.media);
@@ -1065,7 +1065,35 @@ async function importBackup(file) {
     renderAll();
     if (project.photoTaskMode) switchTab('photos');
     notify('案件檔已開啟，請核對點位圖、讀數及照片。');
-  } catch (error) { notify(`開啟失敗：${error.message}`, true); }
+    return true;
+  } catch (error) { notify(`開啟失敗：${error.message}`, true); return false; }
+}
+
+async function loadTestCase() {
+  const button = $('#loadTestCase');
+  if (button.disabled) return;
+  button.disabled = true;
+  button.textContent = '準備測試案件…';
+  $('#message').hidden = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch('./test-cases/v0.7.2/V072-PDF-30points-30photos.json', { signal: controller.signal, cache: 'no-cache' });
+    if (!response.ok) throw new Error(`下載失敗（${response.status}），請稍後再試`);
+    const contents = await response.text();
+    clearTimeout(timeout);
+    if (await importBackup({ text: async () => contents }, true)) {
+      switchTab('result');
+      notify('已載入合成測試案件，可預覽成果總表或整份報告。');
+    }
+  } catch (error) {
+    const reason = error.name === 'AbortError' ? '連線逾時，請確認網路後重試' : error.message;
+    notify(`測試案件載入失敗：${reason}。原案件未被取代。`, true);
+  } finally {
+    clearTimeout(timeout);
+    button.disabled = false;
+    button.textContent = '載入測試案件';
+  }
 }
 
 function switchTab(name) {
@@ -1587,6 +1615,7 @@ function bindActions() {
   $('#sharePhotoResult').onclick = () => exportPhotoWork('result', true);
   $('#verifyBackup').onchange = event => { verifyBackup(event.target.files[0]); event.target.value = ''; };
   $('#mergePhotoBackup').onchange = event => { mergePhotoBackup(event.target.files[0]); event.target.value = ''; };
+  $('#loadTestCase').onclick = loadTestCase;
   $('#importBackup').onchange = event => { importBackup(event.target.files[0]); event.target.value = ''; };
   $('#newCase').onclick = async () => {
     if (!await confirmReplacement()) return;

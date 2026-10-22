@@ -1,4 +1,4 @@
-const CACHE = 'level-survey-v0.7.2';
+const CACHE = 'level-survey-v0.7.3';
 const APP_FILES = ['./', './index.html', './app.js', './calc.js', './store.js', './audit.js', './integrity.js', './exif.js', './observation.js', './pdf-pages.js', './style.css', './vendor/html2pdf.bundle.min.js', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png', './manifest.webmanifest', './equipment/pentax-ap-128.jpg'];
 self.addEventListener('install', event => {
   const requests = APP_FILES.map(file => new Request(new URL(file, self.registration.scope), { cache: 'reload' }));

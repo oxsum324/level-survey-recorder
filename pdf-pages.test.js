@@ -60,3 +60,26 @@ test('R1 DOM collection protects existing print-avoid panels, maps, tables and f
   assert.equal(blocks[0].end, 1090);
   assert.deepEqual(pageCanvasPlan(681, 1500, 1000, 2, blocks).slices.map(slice => slice.end), [950, 1500]);
 });
+
+test('D4 heading follows the first sibling at least 60px high, with immediate-sibling fallback', () => {
+  const container = {};
+  const photo = { offsetTop: 1040, offsetHeight: 400, offsetParent: container, nextElementSibling: null };
+  const note = { offsetTop: 970, offsetHeight: 22, offsetParent: container, nextElementSibling: photo };
+  const heading = { tagName: 'H2', className: '', textContent: '儀器照片', offsetTop: 940, offsetHeight: 25, offsetParent: container, matches: () => true, nextElementSibling: note };
+  container.querySelectorAll = selector => selector === 'H2' ? [heading] : [heading];
+  let blocks = reportBreakPoints(container);
+  assert.equal(blocks[1].end, 1440);
+  assert.equal(pageCanvasPlan(681, 1500, 1000, 2, blocks).slices[0].end, 940);
+  note.nextElementSibling = null;
+  blocks = reportBreakPoints(container);
+  assert.equal(blocks[1].end, 992);
+});
+
+test('D4 a tiny final page remains separate when merging would exceed the unchanged page height', () => {
+  const plan = pageCanvasPlan(681, 2050, 1000, 2, [{ start: 1980, end: 2050, label: 'footer' }]);
+  assert.deepEqual(plan.slices.map(slice => [slice.start, slice.end]), [[0, 1000], [1000, 1980], [1980, 2050]]);
+  assert.equal(plan.shortLastPage.height, 70);
+  assert.equal(plan.shortLastPage.merged, false);
+  assert.equal(plan.shortLastPage.reason, '合併後超過頁高');
+  assert.ok(plan.slices.every(slice => slice.end - slice.start <= 1000 && slice.hardCuts.length === 0));
+});

@@ -24,7 +24,24 @@ export function pageCanvasPlan(width, height, pageHeight, scale = 2, breakPoints
     slices.push({ start, end, next: blocks.filter(block => block.start === end).map(block => block.label), hardCuts });
     start = end;
   }
-  return { pages: slices.length, canvasWidth, canvasHeight, area: canvasWidth * canvasHeight, slices, oversized };
+  let shortLastPage = null;
+  if (slices.length > 1) {
+    const tail = slices.at(-1), previous = slices.at(-2);
+    const remaining = height - tail.start;
+    if (remaining <= pageHeight * 0.08) {
+      const fits = height - previous.start <= pageHeight;
+      const crossesProtected = keepTogether.some(block => block.start < height && block.end > height);
+      const merged = fits && !crossesProtected;
+      shortLastPage = { height: remaining, merged, reason: merged ? '可容納於前頁' : !fits ? '合併後超過頁高' : '會跨越保護區塊' };
+      if (merged) {
+        previous.end = height;
+        previous.next = blocks.filter(block => block.start === height).map(block => block.label);
+        previous.hardCuts = blocks.filter(block => block.start < height && block.end > height);
+        slices.pop();
+      }
+    }
+  }
+  return { pages: slices.length, canvasWidth, canvasHeight, area: canvasWidth * canvasHeight, slices, oversized, shortLastPage };
 }
 
 // offsetTop/offsetHeight stay in layout pixels even while the preview uses CSS zoom.
@@ -39,7 +56,12 @@ export function reportBreakPoints(container) {
     return `${element.tagName.toLowerCase()}${element.className ? '.' + String(element.className).trim().replace(/\s+/g, '.') : ''}[${index}] ${element.textContent.trim().replace(/\s+/g, ' ').slice(0, 90)}`;
   };
   return [...container.querySelectorAll('h2, h3, tr, .print-photo, .photo-card, .print-alert, .print-map, .point-print-table, .analysis-panel, footer')].flatMap(element => {
-    const following = element.matches('h2, h3') ? element.nextElementSibling : null;
+    let following = element.matches('h2, h3') ? element.nextElementSibling : null;
+    if (following) {
+      let substantive = following;
+      while (substantive && substantive.offsetHeight < 60) substantive = substantive.nextElementSibling;
+      following = substantive || following;
+    }
     const block = { start: top(element), end: top(element) + element.offsetHeight, label: label(element) };
     return following ? [block, { ...block, end: Math.max(block.end, top(following) + following.offsetHeight), label: `${block.label} + 首區塊` }] : [block];
   });

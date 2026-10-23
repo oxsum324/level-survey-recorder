@@ -1,0 +1,73 @@
+async page => {
+  const base = new URL('./', page.url()).href;
+  const diagnostics=[];page.on('pageerror',error=>diagnostics.push(error.message));
+  await page.setViewportSize({width:375,height:812});
+  await page.waitForFunction(()=>document.querySelector('#saveState').textContent.includes('已載入'));
+  await page.waitForFunction(()=>document.querySelector('h1').textContent.includes('V0.7.5'));
+  await page.waitForFunction(()=>document.querySelector('#testTools').hidden && document.querySelector('#demoState').hidden);
+  await page.locator('#storageState').scrollIntoViewIfNeeded();
+  await page.screenshot({path:'output/playwright/release075-normal.png'});
+  const demo=await page.context().newPage();await demo.setViewportSize({width:375,height:812});await demo.goto(base+'index.html?release=0.7.5&demo=1');await page.close();page=demo;page.on('pageerror',error=>diagnostics.push(error.message));
+  await page.waitForFunction(()=>!document.querySelector('#testTools').hidden && document.querySelector('#saveState').textContent.includes('已載入'));
+  await page.locator('#testTools').scrollIntoViewIfNeeded();await page.screenshot({path:'output/playwright/release075-demo-entry.png'});
+  await page.locator('#loadTestCase').click();await page.waitForFunction(()=>document.querySelector('#replaceDialog').open);
+  await page.waitForFunction(()=>document.querySelector('#replaceMessage').textContent==='目前案件尚無資料，繼續會以新案件取代。' && document.querySelector('#backupBeforeReplace').hidden);
+  await page.screenshot({path:'output/playwright/release075-empty-prompt.png'});
+  await page.locator('[data-replace="replace"]').click();
+  await page.waitForFunction(()=>!document.querySelector('#resultPanel').hidden && document.querySelector('#caseName').value.startsWith('【測試】') && !document.querySelector('#demoState').hidden);
+  await page.waitForFunction(()=>document.documentElement.scrollWidth<=innerWidth);
+  await page.screenshot({path:'output/playwright/release075-demo-badge.png'});
+  await page.locator('.result-details>summary').click();await page.waitForFunction(()=>document.querySelector('#resultNote').textContent.includes('中間視改正後高程＝改正後儀器視線高 − 中間視讀數'));
+  await page.locator('#resultNote').screenshot({path:'output/playwright/release075-method.png'});
+  let download=page.waitForEvent('download');await page.locator('#exportCsv').click();await(await download).saveAs('output/playwright/release075-demo.csv');
+  const results={diagnostics,cases:{}};
+  const checkReport=async(kind,button)=>{
+    await page.locator(button).click();
+    await page.waitForFunction(kind=>!document.querySelector('#previewPanel').hidden && document.querySelector('#previewTitle').textContent===(kind==='summary'?'水準測量成果總表':'水準測量成果'),kind);
+    await page.waitForFunction(()=>document.querySelector('#pdfStatus').textContent.includes('PDF 已備妥'),null,{timeout:180000});
+    await page.waitForFunction(()=>document.querySelector('#previewSheet .print-title')?.textContent.includes('本案為合成測試資料，不得作為工程成果'));
+    const measure=await page.evaluate(async()=>{
+      const{reportBreakPoints,pageCanvasPlan}=await import('./pdf-pages.js');const report=document.querySelector('#previewSheet #printPanel');
+      const worker=html2pdf().set({margin:15,pagebreak:{mode:[]},html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(report).toContainer();
+      const c=await worker.get('container'),overlay=await worker.get('overlay'),size=await worker.get('pageSize');await Promise.all([...c.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));
+      const blocks=reportBreakPoints(c),plan=pageCanvasPlan(c.getBoundingClientRect().width,Math.ceil(Math.max(c.scrollHeight,...blocks.map(b=>b.end))),size.inner.px.height,2,blocks);
+      const first=c.querySelector('h2,h3,tr,.print-photo,.print-alert');Object.defineProperty(first,'offsetParent',{configurable:true,get:()=>null});const fallback=reportBreakPoints(c);delete first.offsetParent;
+      const fallbackPlan=pageCanvasPlan(c.getBoundingClientRect().width,Math.ceil(Math.max(c.scrollHeight,...fallback.map(b=>b.end))),size.inner.px.height,2,fallback);
+      const compare={offsetScrollHeight:c.scrollHeight,effectiveHeight:plan.slices.at(-1).end,maxStartDelta:Math.max(...blocks.map((b,i)=>Math.abs(b.start-fallback[i].start))),maxEndDelta:Math.max(...blocks.map((b,i)=>Math.abs(b.end-fallback[i].end))),pagesEqual:plan.pages===fallbackPlan.pages,offsetCuts:plan.slices.map(s=>s.end),rectCuts:fallbackPlan.slices.map(s=>s.end)};
+      overlay.remove();return{plan,blocks,compare,photoCards:report.querySelectorAll('.print-photo').length};
+    });
+    if(measure.plan.slices.some(s=>s.hardCuts.length))throw Error('仍有保護區塊跨頁：'+JSON.stringify(measure.plan.slices.filter(s=>s.hardCuts.length)));
+    download=page.waitForEvent('download');await page.locator('#downloadPdf').click();await(await download).saveAs(`output/playwright/release075-${kind}.pdf`);
+    await page.screenshot({path:`output/playwright/release075-${kind}-preview.png`});await page.locator('#closePreview').click();results.cases[kind]=measure;
+  };
+  await checkReport('summary','#printSummary');await checkReport('report','#printReport');
+  await page.locator('[data-tab="route"]').click();await page.locator('#loadTestCase').click();await page.waitForFunction(()=>document.querySelector('#replaceDialog').open);
+  await page.waitForFunction(()=>document.querySelector('#replaceMessage').textContent==='目前案件已有讀數或照片，繼續會取代它。請先選擇處理方式。' && !document.querySelector('#backupBeforeReplace').hidden);
+  await page.screenshot({path:'output/playwright/release075-recorded-prompt.png'});await page.locator('[data-replace="cancel"]').click();
+  const clean=await page.context().newPage();await clean.setViewportSize({width:375,height:812});await clean.goto(base+'index.html?release=0.7.5');await page.close();page=clean;page.on('pageerror',error=>diagnostics.push(error.message));
+  await page.waitForFunction(()=>document.querySelector('#testTools').hidden && !document.querySelector('#demoState').hidden && document.querySelector('#caseName').value.startsWith('【測試】'));
+  const incoming=await page.evaluate(async()=>{const{loadProject}=await import('./store.js');return await loadProject();});
+  results.persisted={demo:incoming.demo,name:incoming.name,photos:incoming.photos.length,points:incoming.points.length};
+  await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
+  await page.waitForFunction(()=>navigator.serviceWorker.controller);
+  await page.waitForFunction(async()=>{const names=await caches.keys();return names.includes('level-survey-v0.7.5') && !names.some(n=>n.startsWith('level-survey-')&&n!=='level-survey-v0.7.5');});
+  await page.context().setOffline(true);
+  try {
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector('h1').textContent.includes('V0.7.5') && document.querySelector('#caseName').value.startsWith('【測試】') && !document.querySelector('#offlineState').hidden);
+    await page.locator('[data-tab="result"]').click();
+    await page.locator('#printSummary').click();
+    await page.waitForFunction(()=>document.querySelector('#pdfStatus').textContent.includes('PDF 已備妥'),null,{timeout:180000});
+    const offlineDownload=page.waitForEvent('download');await page.locator('#downloadPdf').click();await(await offlineDownload).saveAs('output/playwright/release075-offline-summary.pdf');
+    await page.screenshot({path:'output/playwright/release075-offline.png'});
+    results.offline={reload:true,persistedDemo:true,summaryDownload:true};
+  } finally {await page.context().setOffline(false);}
+  await page.locator('#closePreview').click();
+  await page.locator('[data-tab="route"]').click();
+  await page.locator('#newCase').click();await page.waitForFunction(()=>document.querySelector('#replaceDialog').open);await page.locator('[data-replace="replace"]').click();
+  await page.waitForFunction(()=>document.querySelector('#demoState').hidden && document.querySelector('#caseName').value==='');
+  results.normalModeRetainsDemoLabel=true;results.newCaseClearsLabel=true;
+  results.version='0.7.5';results.physicalPhoneTested=false;
+  if(diagnostics.length)throw Error('Page errors: '+diagnostics.join('; '));
+  return results;
+}

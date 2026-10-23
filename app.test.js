@@ -373,3 +373,75 @@ test('repeated sample clicks do not start parallel downloads', async () => {
   await pending;
   assert.equal(h.node('#loadTestCase').disabled, false);
 });
+
+test('D1 demo entry is hidden by default and shown only for demo=1', () => {
+  const h = appHarness();
+  for (const search of ['', '?release=0.7.4', '?demo=0', '?demo=true']) {
+    h.context.search = search; h.run('initializeDemoMode(search)');
+    assert.equal(h.node('#testTools').hidden, true);
+  }
+  h.run("initializeDemoMode('?release=0.7.4&demo=1')");
+  assert.equal(h.node('#testTools').hidden, false);
+});
+
+test('D1 demonstration loading marks and prefixes the case without duplicating the prefix', async () => {
+  for (const existingPrefix of [false, true]) {
+    const h = sampleLoaderHarness();
+    h.run("initializeDemoMode('?demo=1')");
+    if (existingPrefix) h.context.sampleContents = h.context.sampleContents.replace('合成測試案件', '【測試】合成測試案件');
+    await h.node('#loadTestCase').onclick();
+    assert.equal(h.run('project.demo'), true);
+    assert.equal(h.run('project.name'), '【測試】合成測試案件');
+    h.run('renderDemoState()'); assert.equal(h.node('#demoState').hidden, false);
+    h.run('project = blankProject(); renderDemoState()'); assert.equal(h.node('#demoState').hidden, true);
+  }
+});
+
+test('D1 both generated HTML reports and the delivered CSV warn on synthetic data only', async () => {
+  for (const demo of [false, true]) {
+    const h = caseWithReading(); h.context.testReports = []; h.context.demoFlag = demo;
+    h.run(`project.demo = demoFlag; caseFingerprint = async () => 'a'.repeat(64);
+      showPreview = report => testReports.push(report.innerHTML);
+      document.createElement = () => ({ innerHTML: '', querySelectorAll: () => [] });
+      deliverFile = async (name, blob) => { globalThis.csvContents = await blob.text(); globalThis.csvBytes = [...new Uint8Array(await blob.arrayBuffer())]; return true; };`);
+    h.node('#previewSheet').append = () => {}; h.node('#printPanel').remove = () => {};
+    await h.run('buildSummaryPreview()'); await h.run('buildReportPreview()'); await h.node('#exportCsv').onclick();
+    for (const html of h.context.testReports) assert.equal(html.includes('本案為合成測試資料，不得作為工程成果'), demo);
+    assert.equal(h.context.csvContents.includes('本案為合成測試資料，不得作為工程成果'), demo);
+    assert.deepEqual(Array.from(h.context.csvBytes.slice(0, 3)), [239, 187, 191]);
+  }
+});
+
+test('D2 replacement dialog distinguishes recorded and blank cases without exporting an empty case', async () => {
+  for (const hasRecords of [true, false]) {
+    const h = caseWithReading();
+    if (!hasRecords) h.run('project = blankProject()');
+    const dialog = h.node('#replaceDialog'), callbacks = new Map();
+    dialog.addEventListener = (name, callback) => callbacks.set(name, callback);
+    dialog.removeEventListener = () => {};
+    dialog.showModal = () => { dialog.returnValue = 'cancel'; callbacks.get('close')(); };
+    assert.equal(await h.run('realConfirmReplacement(true)'), false);
+    assert.equal(h.node('#backupBeforeReplace').hidden, !hasRecords);
+    assert.equal(h.node('#replaceMessage').textContent, hasRecords
+      ? '目前案件已有讀數或照片，繼續會取代它。請先選擇處理方式。'
+      : '目前案件尚無資料，繼續會以新案件取代。');
+  }
+});
+
+test('D3 demonstration loading supplies a real JSON File and uses default HTTP caching', async () => {
+  const h = sampleLoaderHarness(); let request;
+  h.context.fetch = async (url, options) => { request = { url, cache: options.cache }; return { ok: true, text: async () => h.context.sampleContents }; };
+  h.run('importBackup = async file => { globalThis.sampleFile = file; return false; }');
+  await h.node('#loadTestCase').onclick();
+  assert.equal(request.url, './test-cases/demo-case.json'); assert.equal(request.cache, 'default');
+  assert.ok(h.context.sampleFile instanceof File);
+  assert.equal(h.context.sampleFile.name, 'level-survey-demo.json');
+  assert.equal(h.context.sampleFile.type, 'application/json');
+  assert.equal(await h.context.sampleFile.text(), h.context.sampleContents);
+});
+
+test('D6 the results disclosure includes the same intermediate-sight correction method as reports', () => {
+  const h = caseWithReading(); h.run('renderResult()');
+  assert.ok(h.node('#resultNote').textContent.includes('中間視改正後高程＝改正後儀器視線高 − 中間視讀數；改正後儀器視線高採該測站後視點的改正後高程加後視讀數，不在站內按距離分配。'));
+  assert.ok(h.node('#resultNote').textContent.includes('此處為單一測線的簡易閉合差分配，不代表控制網整體平差。'));
+});

@@ -24,24 +24,66 @@ export function pageCanvasPlan(width, height, pageHeight, scale = 2, breakPoints
     slices.push({ start, end, next: blocks.filter(block => block.start === end).map(block => block.label), hardCuts });
     start = end;
   }
-  return { pages: slices.length, canvasWidth, canvasHeight, area: canvasWidth * canvasHeight, slices, oversized };
+  let shortLastPage = null;
+  if (slices.length > 1) {
+    const tail = slices.at(-1), previous = slices.at(-2);
+    const remaining = height - tail.start;
+    if (remaining <= pageHeight * 0.08) {
+      const fits = height - previous.start <= pageHeight;
+      const crossesProtected = keepTogether.some(block => block.start < height && block.end > height);
+      const merged = fits && !crossesProtected;
+      shortLastPage = { height: remaining, merged, reason: merged ? '可容納於前頁' : !fits ? '合併後超過頁高' : '會跨越保護區塊' };
+      if (merged) {
+        previous.end = height;
+        previous.next = blocks.filter(block => block.start === height).map(block => block.label);
+        previous.hardCuts = blocks.filter(block => block.start < height && block.end > height);
+        slices.pop();
+      }
+    }
+  }
+  return { pages: slices.length, canvasWidth, canvasHeight, area: canvasWidth * canvasHeight, slices, oversized, shortLastPage };
 }
 
 // offsetTop/offsetHeight stay in layout pixels even while the preview uses CSS zoom.
 export function reportBreakPoints(container) {
-  const top = element => {
+  const elements = [...container.querySelectorAll('h2, h3, tr, .print-photo, .photo-card, .print-alert, .print-map, .point-print-table, .analysis-panel, footer')];
+  let ancestor = elements[0];
+  while (ancestor && ancestor !== container) ancestor = ancestor.offsetParent;
+  const useRect = elements.length > 0 && ancestor !== container;
+  let origin, zoom = 1;
+  if (useRect) {
+    console.warn('報告區塊的 offsetParent 鏈不含轉檔容器；改用相對 DOMRect 與 CSS zoom 量測。');
+    origin = container.getBoundingClientRect();
+    const view = container.ownerDocument?.defaultView;
+    for (let node = container; node; node = node.parentElement) {
+      const value = parseFloat(view?.getComputedStyle(node).zoom);
+      if (Number.isFinite(value) && value > 0) zoom *= value;
+    }
+  }
+  const bounds = element => {
+    if (useRect) {
+      const rect = element.getBoundingClientRect();
+      return { top: (rect.top - origin.top) / zoom, height: rect.height / zoom };
+    }
     let value = 0;
     for (let node = element; node && node !== container; node = node.offsetParent) value += node.offsetTop;
-    return value;
+    return { top: value, height: element.offsetHeight };
   };
   const label = element => {
     const index = [...container.querySelectorAll(element.tagName)].indexOf(element) + 1;
     return `${element.tagName.toLowerCase()}${element.className ? '.' + String(element.className).trim().replace(/\s+/g, '.') : ''}[${index}] ${element.textContent.trim().replace(/\s+/g, ' ').slice(0, 90)}`;
   };
-  return [...container.querySelectorAll('h2, h3, tr, .print-photo, .photo-card, .print-alert, .print-map, .point-print-table, .analysis-panel, footer')].flatMap(element => {
-    const following = element.matches('h2, h3') ? element.nextElementSibling : null;
-    const block = { start: top(element), end: top(element) + element.offsetHeight, label: label(element) };
-    return following ? [block, { ...block, end: Math.max(block.end, top(following) + following.offsetHeight), label: `${block.label} + 首區塊` }] : [block];
+  return elements.flatMap(element => {
+    let following = element.matches('h2, h3') ? element.nextElementSibling : null;
+    if (following) {
+      let substantive = following;
+      while (substantive && substantive.offsetHeight < 60) substantive = substantive.nextElementSibling;
+      following = substantive || following;
+    }
+    const measured = bounds(element);
+    const block = { start: measured.top, end: measured.top + measured.height, label: label(element) };
+    const next = following ? bounds(following) : null;
+    return next ? [block, { ...block, end: Math.max(block.end, next.top + next.height), label: `${block.label} + 首區塊` }] : [block];
   });
 }
 
@@ -57,7 +99,9 @@ export async function renderPagedPdf(report, options, { onProgress = () => {}, i
     const width = container.getBoundingClientRect().width;
     const pageHeight = pageSize.inner.px.height;
     const blocks = reportBreakPoints(container);
-    const plan = pageCanvasPlan(width, container.scrollHeight, pageHeight, options.html2canvas.scale, blocks);
+    // Rounded offset geometry can extend one pixel beyond scrollHeight. Include the whole last block.
+    const height = Math.ceil(Math.max(container.scrollHeight, ...blocks.map(block => block.end)));
+    const plan = pageCanvasPlan(width, height, pageHeight, options.html2canvas.scale, blocks);
     const laidOut = container.firstElementChild.cloneNode(true);
     layoutOverlay.remove(); layoutOverlay = null;
     const seed = document.createElement('canvas'); seed.width = 1; seed.height = 1;

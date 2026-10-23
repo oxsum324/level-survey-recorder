@@ -408,6 +408,22 @@ test('D1 both generated HTML reports and the delivered CSV warn on synthetic dat
     await h.run('buildSummaryPreview()'); await h.run('buildReportPreview()'); await h.node('#exportCsv').onclick();
     for (const html of h.context.testReports) assert.equal(html.includes('本案為合成測試資料，不得作為工程成果'), demo);
     assert.equal(h.context.csvContents.includes('本案為合成測試資料，不得作為工程成果'), demo);
-    assert.deepEqual(h.context.csvBytes.slice(0, 3), [239, 187, 191]);
+    assert.deepEqual(Array.from(h.context.csvBytes.slice(0, 3)), [239, 187, 191]);
+  }
+});
+
+test('D2 replacement dialog distinguishes recorded and blank cases without exporting an empty case', async () => {
+  for (const hasRecords of [true, false]) {
+    const h = caseWithReading();
+    if (!hasRecords) h.run('project = blankProject()');
+    const dialog = h.node('#replaceDialog'), callbacks = new Map();
+    dialog.addEventListener = (name, callback) => callbacks.set(name, callback);
+    dialog.removeEventListener = () => {};
+    dialog.showModal = () => { dialog.returnValue = 'cancel'; callbacks.get('close')(); };
+    assert.equal(await h.run('realConfirmReplacement(true)'), false);
+    assert.equal(h.node('#backupBeforeReplace').hidden, !hasRecords);
+    assert.equal(h.node('#replaceMessage').textContent, hasRecords
+      ? '目前案件已有讀數或照片，繼續會取代它。請先選擇處理方式。'
+      : '目前案件尚無資料，繼續會以新案件取代。');
   }
 });

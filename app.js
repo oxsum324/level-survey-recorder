@@ -942,6 +942,11 @@ function hasCaseRecords() {
 
 async function confirmReplacement(alwaysConfirm = false) {
   if (!alwaysConfirm && !hasCaseRecords()) return true;
+  const hasRecords = hasCaseRecords();
+  $('#replaceMessage').textContent = hasRecords
+    ? '目前案件已有讀數或照片，繼續會取代它。請先選擇處理方式。'
+    : '目前案件尚無資料，繼續會以新案件取代。';
+  $('#backupBeforeReplace').hidden = !hasRecords;
   const dialog = $('#replaceDialog');
   dialog.returnValue = 'cancel';
   const action = await new Promise(resolve => {

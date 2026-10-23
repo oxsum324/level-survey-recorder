@@ -10,13 +10,15 @@ export const canonicalize = value => JSON.stringify(ordered(value));
 
 const FINGERPRINT_FIELDS = [
   'schema', 'id', 'name', 'number', 'date', 'observer', 'rodHolder', 'photographer',
+  'householdNo', 'address', 'orgName',
   'instrument', 'datum', 'approxLocation', 'mapMediaId', 'mapSource', 'points',
   'route', 'setups', 'auditLog', 'instrumentCheck', 'environment', 'checklist',
   'photos', 'equipmentPhotos', 'routeHistory',
 ];
 
 export function fingerprintPayload(project, mediaHashes = []) {
-  const evidence = Object.fromEntries(FINGERPRINT_FIELDS.filter(key => project[key] !== undefined).map(key => [key, project[key]]));
+  const evidence = Object.fromEntries(FINGERPRINT_FIELDS.filter(key => project[key] !== undefined
+    && !(['householdNo', 'address', 'orgName'].includes(key) && project[key] === '')).map(key => [key, project[key]]));
   evidence.mediaHashes = mediaHashes.map(item => ({ id: item.id, sha256: item.sha256 })).sort((a, b) => a.id.localeCompare(b.id));
   return evidence;
 }

@@ -21,7 +21,10 @@ function initializeDemoMode(search = window.location?.search || '') {
   $('#testTools').hidden = !demoModeEnabled;
 }
 
-function renderDemoState() { $('#demoState').hidden = project.demo !== true; }
+function renderDemoState() {
+  $('#demoState').hidden = project.demo !== true;
+  document.documentElement.classList.toggle('demo-case', project.demo === true);
+}
 const demoWarningHtml = () => project.demo === true ? `<p class="print-alert">${DEMO_WARNING}</p>` : '';
 const photoUrls = new Map();
 const equipmentPhotoUrls = new Map();
@@ -51,7 +54,7 @@ const photoTime = photo => `${dateTime(photo.capturedAt || photo.addedAt)}（來
 function blankProject() {
   const bm = { id: uid(), code: 'BM1', type: 'BM', description: '', position: null };
   return {
-    schema: 1, appVersion: VERSION, id: uid(), name: '', number: '', date: new Date().toISOString().slice(0, 10),
+    schema: 1, appVersion: VERSION, id: uid(), name: '', number: '', householdNo: '', address: '', orgName: '', date: new Date().toISOString().slice(0, 10),
     observer: '', rodHolder: '', photographer: '', instrument: DEFAULT_INSTRUMENT, instrumentDefaultApplied: true, datum: '', approxLocation: '', points: [bm], pointPlan: { sCount: '0', tpCount: '0' }, mapMediaId: null, mapSource: '', photos: [], equipmentPhotos: [],
     route: { startId: bm.id, endId: bm.id, startHeight: '10.000', startHeightKind: 'assumed', endHeight: '', toleranceMm: '', toleranceBasis: '', formulaC: '', staffLengthM: '5', stadiaConstantK: '100', threeWireToleranceMm: '', adjustMethod: 'stations' },
     instrumentCheck: { serial: '', calibrationDate: '', calibrationAgency: '', twoPeg: { a1: '', b1: '', a2: '', b2: '', distanceM: '' } },
@@ -61,6 +64,7 @@ function blankProject() {
 
 function normalizeProject() {
   let changed = false;
+  for (const key of ['householdNo', 'address', 'orgName']) if (project[key] === undefined) project[key] = '';
   if (!Array.isArray(project.equipmentPhotos)) { project.equipmentPhotos = []; changed = true; }
   if (!project.instrumentDefaultApplied) {
     if (!project.instrument) project.instrument = DEFAULT_INSTRUMENT;
@@ -1138,6 +1142,9 @@ function renderAll() {
   for (const tab of ['measure', 'result']) $(`.tabs [data-tab="${tab}"]`).hidden = !!project.photoTaskMode;
   $('#caseName').value = project.name || '';
   $('#caseNo').value = project.number || '';
+  $('#householdNo').value = project.householdNo || '';
+  $('#address').value = project.address || '';
+  $('#orgName').value = project.orgName || '';
   $('#surveyDate').value = project.date || '';
   $('#observer').value = project.observer || '';
   $('#rodHolder').value = project.rodHolder || '';
@@ -1174,7 +1181,7 @@ function renderTwoPegResult() {
 }
 
 function handleRouteInput(event) {
-  const mapping = { caseName: 'name', caseNo: 'number', surveyDate: 'date', observer: 'observer', rodHolder: 'rodHolder', photographer: 'photographer', instrument: 'instrument', datum: 'datum', approxLocation: 'approxLocation', mapSource: 'mapSource', fieldMapSource: 'mapSource' };
+  const mapping = { caseName: 'name', caseNo: 'number', householdNo: 'householdNo', address: 'address', orgName: 'orgName', surveyDate: 'date', observer: 'observer', rodHolder: 'rodHolder', photographer: 'photographer', instrument: 'instrument', datum: 'datum', approxLocation: 'approxLocation', mapSource: 'mapSource', fieldMapSource: 'mapSource' };
   const routeMapping = { startHeight: 'startHeight', startHeightKind: 'startHeightKind', endHeight: 'endHeight', toleranceMm: 'toleranceMm', toleranceBasis: 'toleranceBasis', formulaC: 'formulaC', staffLengthM: 'staffLengthM', stadiaConstantK: 'stadiaConstantK', threeWireToleranceMm: 'threeWireToleranceMm', adjustMethod: 'adjustMethod' };
   if (mapping[event.target.id]) project[mapping[event.target.id]] = event.target.value;
   else if (routeMapping[event.target.id]) project.route[routeMapping[event.target.id]] = event.target.value;
@@ -1770,6 +1777,12 @@ function printTable(result) {
   return `<table><thead><tr><th>站</th><th>點號</th><th>後視 BS<br>m</th><th>前視 FS<br>m</th><th>中間視 IS<br>m</th><th>觀測時間</th><th>暫算高程<br>m</th><th>改正後高程<br>m</th><th>備註</th></tr></thead><tbody>${resultRows(result)}</tbody></table>`;
 }
 
+function caseIdentityHtml() {
+  return [['householdNo', '戶別'], ['address', '地址'], ['orgName', '鑑定單位']]
+    .filter(([key]) => String(project[key] ?? '').trim())
+    .map(([key, label]) => `<p>${label}：${safe(project[key])}</p>`).join('');
+}
+
 async function buildSummaryPreview() {
   const result = calculate(project);
   let hash;
@@ -1777,7 +1790,7 @@ async function buildSummaryPreview() {
   const report = document.createElement('section');
   report.id = 'printPanel';
   report.className = 'summary-print';
-  report.innerHTML = `<header class="print-title"><h1>水準測量成果總表</h1>${demoWarningHtml()}<p>案件：${safe(project.name || '未填')}　案號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　儀器觀測者：${safe(project.observer || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p><p>測線：${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}　起點${project.route.startHeightKind === 'assumed' ? '假設' : '已知'}高程：${formatHeight(result.startHeight)} m</p></header>
+  report.innerHTML = `<header class="print-title"><h1>水準測量成果總表</h1>${demoWarningHtml()}${caseIdentityHtml()}<p>案件：${safe(project.name || '未填')}　案號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　儀器觀測者：${safe(project.observer || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p><p>測線：${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}　起點${project.route.startHeightKind === 'assumed' ? '假設' : '已知'}高程：${formatHeight(result.startHeight)} m</p></header>
     <p class="summary-print-status"><strong>${summaryStatus(result)}</strong></p>${printTable(result)}
     <div class="summary-print-checks">${summaryChecks(result)}<span>實測終點 <strong>${formatHeight(result.rawEndHeight)} m</strong></span></div>
     <p>容許值依據：${safe(project.route.toleranceBasis || '未填')}。</p>${arithmeticSummary(result)}${sightBalanceSummary(result)}
@@ -1808,9 +1821,9 @@ async function buildReportPreview() {
   const status = result.withinTolerance === true ? '符合輸入容許值' : result.withinTolerance === false ? '超出容許值，未進行改正' : '尚未完成閉合檢核';
   const report = document.createElement('section');
   report.id = 'printPanel';
-  report.innerHTML = `<header class="print-title"><small>水準測量現場紀錄 V${VERSION}</small><h1>${safe(project.name || '水準測量成果')}</h1>${demoWarningHtml()}<p>案件編號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}　儀器觀測者：${safe(project.observer || '未填')}　扶尺人員：${safe(project.rodHolder || '未填')}　攝影者：${safe(project.photographer || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p><p>天氣：${safe([project.environment.weather, project.environment.weatherOther].filter(Boolean).join('／') || '未填')}　氣溫：${safe(project.environment.temperature || '未填')} °C　觀測開始：${safe(dateTime(project.environment.start) || '未填')}　觀測結束：${safe(dateTime(project.environment.end) || '未填')}</p><p>現場備註：${safe(project.environment.notes || '未填')}</p></header>
+  report.innerHTML = `<header class="print-title"><small>水準測量現場紀錄 V${VERSION}</small><h1>${safe(project.name || '水準測量成果')}</h1>${demoWarningHtml()}${caseIdentityHtml()}<p>案件編號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}　儀器觀測者：${safe(project.observer || '未填')}　扶尺人員：${safe(project.rodHolder || '未填')}　攝影者：${safe(project.photographer || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p><p>天氣：${safe([project.environment.weather, project.environment.weatherOther].filter(Boolean).join('／') || '未填')}　氣溫：${safe(project.environment.temperature || '未填')} °C　觀測開始：${safe(dateTime(project.environment.start) || '未填')}　觀測結束：${safe(dateTime(project.environment.end) || '未填')}</p><p>現場備註：${safe(project.environment.notes || '未填')}</p></header>
     <h2>一、測線與點位</h2><p>測線：${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}；起點${project.route.startHeightKind === 'assumed' ? '假設' : '已知'}高程：${formatHeight(result.startHeight)} m；${project.route.startId === project.route.endId ? '回測起點高程' : '終點已知高程'}：${formatHeight(result.endHeight)} m。</p>
-    <p>約略地址／路名：${safe(project.approxLocation || '未填')}。底圖來源：${safe(project.mapSource || '未填')}。位置圖僅供示意，不作測線長度量測。</p>${map}
+    <p>約略位置（地圖搜尋用）：${safe(project.approxLocation || '未填')}。底圖來源：${safe(project.mapSource || '未填')}。位置圖僅供示意，不作測線長度量測。</p>${map}
     <p class="print-note">下表與圖上標記僅列有觀測讀數的點位；未使用的預排點位不列入成果。</p>
     ${reportedPoints.length ? `<table class="point-print-table"><thead><tr><th>點號</th><th>類別</th><th>位置說明</th></tr></thead><tbody>${reportedPoints.map(item => `<tr><td>${safe(item.code)}</td><td>${safe(item.type)}</td><td>${safe(item.description || '—')}</td></tr>`).join('')}</tbody></table>` : '<p>尚無已觀測點位。</p>'}
     <h2>二、水準測量成果總表</h2><p><strong>${summaryStatus(result)}</strong></p>${printTable(result)}

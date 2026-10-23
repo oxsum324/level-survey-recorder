@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { appHarness } from './checks/app-harness.js';
+import { readFileSync } from 'node:fs';
 
 function caseWithReading() {
   const h = appHarness();
@@ -444,4 +445,76 @@ test('D6 the results disclosure includes the same intermediate-sight correction 
   const h = caseWithReading(); h.run('renderResult()');
   assert.ok(h.node('#resultNote').textContent.includes('中間視改正後高程＝改正後儀器視線高 − 中間視讀數；改正後儀器視線高採該測站後視點的改正後高程加後視讀數，不在站內按距離分配。'));
   assert.ok(h.node('#resultNote').textContent.includes('此處為單一測線的簡易閉合差分配，不代表控制網整體平差。'));
+});
+
+test('E2 demonstration state toggles the root class for both demonstration and normal cases', () => {
+  const h = appHarness(), classes = new Set();
+  h.node('html').classList.toggle = (name, enabled) => enabled ? classes.add(name) : classes.delete(name);
+  h.run('project = blankProject(); project.demo = true; renderDemoState()');
+  assert.equal(classes.has('demo-case'), true);
+  assert.equal(h.node('#demoState').hidden, false);
+  h.run('project.demo = false; renderDemoState()');
+  assert.equal(classes.has('demo-case'), false);
+  assert.equal(h.node('#demoState').hidden, true);
+  h.run('delete project.demo; renderDemoState()');
+  assert.equal(classes.has('demo-case'), false);
+});
+
+test('E3 blank and historical projects receive empty identity fields without a migration change', () => {
+  const h = appHarness(); h.run('project = blankProject()');
+  for (const key of ['householdNo', 'address', 'orgName']) assert.equal(h.run(`project.${key}`), '');
+  h.context.legacy = JSON.parse(readFileSync(new URL('./checks/fixtures/v070-case.json', import.meta.url), 'utf8')).backup.project;
+  h.run('project = structuredClone(legacy)');
+  assert.equal(h.run('normalizeProject()'), false);
+  for (const key of ['householdNo', 'address', 'orgName']) assert.equal(h.run(`project.${key}`), '');
+  assert.equal(h.run('project.schema'), 1);
+});
+
+test('E3 identity input is exported and survives reopening the same backup', async () => {
+  const h = caseWithReading();
+  for (const [id, value] of [['householdNo', 'A-01'], ['address', '測試路 1 號'], ['orgName', '合成測試單位']]) {
+    h.context.inputTarget = { id, value };
+    assert.equal(h.run('handleRouteInput({ target: inputTarget })'), true);
+  }
+  h.run(`makeBackup = async snapshot => new Blob([JSON.stringify({ format: 'level-survey-case.v1', project: snapshot, media: [] })]);
+    deliverFile = async (name, blob) => { globalThis.identityExport = await blob.text(); return true; };`);
+  await h.run('exportBackup()');
+  const backup = JSON.parse(h.context.identityExport);
+  assert.equal(backup.project.householdNo, 'A-01');
+  assert.equal(backup.project.address, '測試路 1 號');
+  assert.equal(backup.project.orgName, '合成測試單位');
+  h.context.identityFile = new File([h.context.identityExport], 'identity.json', { type: 'application/json' });
+  h.run('project = blankProject()');
+  assert.equal(await h.run('importBackup(identityFile)'), true);
+  for (const key of ['householdNo', 'address', 'orgName']) assert.equal(h.run(`project.${key}`), backup.project[key]);
+});
+
+test('E3 importing an old backup fills identity defaults without changing its fingerprint', async () => {
+  const h = caseWithReading();
+  const backup = JSON.parse(readFileSync(new URL('./checks/fixtures/v070-case.json', import.meta.url), 'utf8')).backup;
+  h.context.oldBackup = backup;
+  const before = await h.run('fingerprint(oldBackup.project)');
+  h.context.oldFile = new File([JSON.stringify(backup)], 'v070.json', { type: 'application/json' });
+  assert.equal(await h.run('importBackup(oldFile)'), true);
+  for (const key of ['householdNo', 'address', 'orgName']) assert.equal(h.run(`project.${key}`), '');
+  assert.equal(await h.run('fingerprint(project)'), before);
+});
+
+test('E3 both report headers omit empty identity fields and escape populated values', async () => {
+  for (const filled of [false, true]) {
+    const h = caseWithReading(); h.context.testReports = [];
+    h.run(`caseFingerprint = async () => 'a'.repeat(64); showPreview = report => testReports.push(report.innerHTML);
+      document.createElement = () => ({ innerHTML: '', querySelectorAll: () => [] });`);
+    h.node('#previewSheet').append = () => {}; h.node('#printPanel').remove = () => {};
+    if (filled) h.run(`project.householdNo = 'A<01>'; project.address = '測試路 & 巷'; project.orgName = '合成測試單位';`);
+    await h.run('buildSummaryPreview()'); await h.run('buildReportPreview()');
+    for (const html of h.context.testReports) {
+      assert.equal(html.includes('<p>戶別：A&lt;01&gt;</p>'), filled);
+      assert.equal(html.includes('<p>地址：測試路 &amp; 巷</p>'), filled);
+      assert.equal(html.includes('<p>鑑定單位：合成測試單位</p>'), filled);
+      assert.equal(html.includes('戶別：未填'), false);
+      assert.equal(html.includes('地址：未填'), false);
+      assert.equal(html.includes('鑑定單位：未填'), false);
+    }
+  }
 });

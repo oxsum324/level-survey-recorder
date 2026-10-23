@@ -104,3 +104,15 @@ test('D5 missing positioned container warns and measures equivalent relative DOM
   assert.equal(result[0].start, 150); assert.equal(result[0].end, 250);
   assert.equal(warnings.length, 1); assert.match(warnings[0], /offsetParent/);
 });
+
+test('E1 short-tail reasons describe the retained page boundary rather than the document end', () => {
+  // Deliberately extend the synthetic block past the document to distinguish
+  // the old end-of-document test from the actual retained boundary at zero.
+  const fitting = pageCanvasPlan(681, 1000, 1000, 2, [{ start: 980, end: 1020, label: 'synthetic boundary probe' }]);
+  assert.deepEqual(fitting.shortLastPage, { height: 20, merged: true, reason: '可容納於前頁' });
+  assert.deepEqual(fitting.slices.map(({ start, end }) => [start, end]), [[0, 1000]]);
+  assert.deepEqual(fitting.slices[0].hardCuts, []);
+  const tooTall = pageCanvasPlan(681, 2050, 1000, 2, [{ start: 1980, end: 2050, label: 'footer' }]);
+  assert.equal(tooTall.shortLastPage.reason, '合併後超過頁高');
+  assert.equal(tooTall.shortLastPage.merged, false);
+});

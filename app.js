@@ -21,7 +21,10 @@ function initializeDemoMode(search = window.location?.search || '') {
   $('#testTools').hidden = !demoModeEnabled;
 }
 
-function renderDemoState() { $('#demoState').hidden = project.demo !== true; }
+function renderDemoState() {
+  $('#demoState').hidden = project.demo !== true;
+  document.documentElement.classList.toggle('demo-case', project.demo === true);
+}
 const demoWarningHtml = () => project.demo === true ? `<p class="print-alert">${DEMO_WARNING}</p>` : '';
 const photoUrls = new Map();
 const equipmentPhotoUrls = new Map();

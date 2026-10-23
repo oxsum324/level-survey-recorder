@@ -445,3 +445,16 @@ test('D6 the results disclosure includes the same intermediate-sight correction 
   assert.ok(h.node('#resultNote').textContent.includes('中間視改正後高程＝改正後儀器視線高 − 中間視讀數；改正後儀器視線高採該測站後視點的改正後高程加後視讀數，不在站內按距離分配。'));
   assert.ok(h.node('#resultNote').textContent.includes('此處為單一測線的簡易閉合差分配，不代表控制網整體平差。'));
 });
+
+test('E2 demonstration state toggles the root class for both demonstration and normal cases', () => {
+  const h = appHarness(), classes = new Set();
+  h.node('html').classList.toggle = (name, enabled) => enabled ? classes.add(name) : classes.delete(name);
+  h.run('project = blankProject(); project.demo = true; renderDemoState()');
+  assert.equal(classes.has('demo-case'), true);
+  assert.equal(h.node('#demoState').hidden, false);
+  h.run('project.demo = false; renderDemoState()');
+  assert.equal(classes.has('demo-case'), false);
+  assert.equal(h.node('#demoState').hidden, true);
+  h.run('delete project.demo; renderDemoState()');
+  assert.equal(classes.has('demo-case'), false);
+});

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#164348">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <title>水準測量現場紀錄 V0.7.3</title>
+  <title>水準測量現場紀錄 V0.7.4</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icon-180.png">
@@ -14,12 +14,11 @@
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.7.3</span></h1></div><div class="top-actions"><button id="sunlightToggle" type="button" aria-pressed="false"><span>強光模式</span></button><span id="offlineState" role="status" hidden>離線：本機資料仍可使用</span><span id="exportState" role="status"></span><span id="saveState" role="status">載入中</span></div></header>
+  <header class="topbar"><div><small>弘一工程 · 鑑定現場工具</small><h1>水準測量紀錄 <span>V0.7.4</span></h1></div><div class="top-actions"><button id="sunlightToggle" type="button" aria-pressed="false"><span>強光模式</span></button><span id="offlineState" role="status" hidden>離線：本機資料仍可使用</span><span id="exportState" role="status"></span><span id="saveState" role="status">載入中</span></div></header>
   <nav class="tabs" aria-label="工作項目"><button data-tab="route" class="active">① 案件與位置</button><button data-tab="measure">② 觀測讀數</button><button data-tab="photos">③ 點位攝影</button><button data-tab="result">④ 計算與成果</button></nav>
   <main>
     <section id="routePanel" class="tab-panel">
       <div class="section-head"><h2>案件與測線</h2><p>先指定起訖點；同一 BM 回測時，起點與終點選同一點。</p></div>
-      <div class="card"><div class="toolbar"><button id="loadTestCase" type="button">載入測試案件</button><span class="note">30 個觀測點・30 張合成照片</span></div><p class="note">需連網。已有案件時會先提醒備份並確認取代；載入後直接查看計算與成果。</p></div>
       <div class="card grid two">
         <label>案件名稱<input id="caseName" maxlength="120" placeholder="例如 ○○工程鄰房現況鑑定"></label>
         <label>案件編號<input id="caseNo" maxlength="80"></label>
@@ -50,6 +49,7 @@
       <div class="card"><div class="toolbar"><button id="addBM" type="button">＋ BM</button><button id="addS" type="button">＋ S</button><button id="addTP" type="button">＋ TP</button></div><p id="mapHint" class="note">新增點位並選擇「放到圖上」，再點圖面位置。底圖僅供位置示意，不以圖上距離計算測線長度。</p><div id="mapHome"><div id="mapFrame" class="map-frame" tabindex="0" aria-label="案件位置圖與點位標記"><div id="mapEmpty">尚未匯入位置圖</div><img id="mapImage" alt="案件位置圖" hidden><div id="mapMarkers"></div></div></div><label>底圖來源／截圖日期<input id="mapSource" maxlength="240" placeholder="例如 Google Maps，截圖日期 2026-09-25；保留原圖標示"></label><div id="pointList" class="point-list"></div></div>
       <div class="toolbar bottom"><button id="exportBackup" type="button">匯出完整案件檔</button><label class="file-button">開啟案件檔<input id="importBackup" type="file" accept=".json,application/json" hidden></label><button id="newCase" type="button" class="danger">建立新案件</button></div>
       <p id="backupSizeNotice" class="note" role="status" hidden></p><p id="storageState" class="storage-state" role="status">本機儲存：檢查中</p><p id="iosHomeHint" class="note" hidden>可用 Safari 分享 → 加入主畫面。離開現場前仍請匯出案件檔。</p>
+      <section id="testTools" class="card" aria-labelledby="testToolsHeading"><h3 id="testToolsHeading">測試工具</h3><div class="toolbar"><button id="loadTestCase" type="button">載入測試案件</button><span class="note">30 個觀測點・30 張合成照片</span></div><p class="note">需連網。載入前會先提醒備份並確認取代；載入後直接查看計算與成果。</p></section>
     </section>
     <section id="measurePanel" class="tab-panel" hidden>
       <div class="section-head measure-head"><h2>現場讀數</h2><div class="measure-controls"><label class="wake-toggle"><input id="wakeLockToggle" type="checkbox" role="switch" aria-label="螢幕常亮" checked><span class="wake-copy"><span><span aria-hidden="true">☀</span> 常亮</span><span id="wakeLockState" role="status"></span></span></label><button id="undoLast" type="button" disabled>復原上一步</button><details class="measure-help"><summary aria-label="操作說明與觀測要點" title="操作說明與觀測要點">？</summary><p>依實際讀法選中間視、換站前視或終點前視；換站後在同一點讀後視。檢查尺豎直、氣泡居中、視線與視距條件；依現場程序複核讀數及轉點。復原僅適用最近一次移除或角色轉換；後續資料變更、切換案件或重新整理會清除復原紀錄。</p></details></div></div>

@@ -30,13 +30,13 @@ export function pageCanvasPlan(width, height, pageHeight, scale = 2, breakPoints
     const remaining = height - tail.start;
     if (remaining <= pageHeight * 0.08) {
       const fits = height - previous.start <= pageHeight;
-      const crossesProtected = keepTogether.some(block => block.start < height && block.end > height);
+      const crossesProtected = keepTogether.some(block => block.start < previous.start && block.end > previous.start);
       const merged = fits && !crossesProtected;
       shortLastPage = { height: remaining, merged, reason: merged ? '可容納於前頁' : !fits ? '合併後超過頁高' : '會跨越保護區塊' };
       if (merged) {
         previous.end = height;
         previous.next = blocks.filter(block => block.start === height).map(block => block.label);
-        previous.hardCuts = blocks.filter(block => block.start < height && block.end > height);
+        previous.hardCuts = blocks.filter(block => block.start < previous.start && block.end > previous.start);
         slices.pop();
       }
     }

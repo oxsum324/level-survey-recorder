@@ -83,3 +83,24 @@ test('D4 a tiny final page remains separate when merging would exceed the unchan
   assert.equal(plan.shortLastPage.reason, '合併後超過頁高');
   assert.ok(plan.slices.every(slice => slice.end - slice.start <= 1000 && slice.hardCuts.length === 0));
 });
+
+test('D5 positioned containers use the offset chain without a fallback warning', t => {
+  const warnings = []; t.mock.method(console, 'warn', message => warnings.push(message));
+  const container = {};
+  const block = { tagName: 'TR', className: '', textContent: 'S1', offsetTop: 150, offsetHeight: 100, offsetParent: container, matches: () => false };
+  container.querySelectorAll = () => [block];
+  const result = reportBreakPoints(container);
+  assert.equal(result[0].start, 150); assert.equal(result[0].end, 250);
+  assert.equal(warnings.length, 0);
+});
+
+test('D5 missing positioned container warns and measures equivalent relative DOMRects under CSS zoom', t => {
+  const warnings = []; t.mock.method(console, 'warn', message => warnings.push(message));
+  const parent = { parentElement: null, ownZoom: '2' };
+  const container = { parentElement: parent, ownZoom: '0.25', getBoundingClientRect: () => ({ top: 40 }), ownerDocument: { defaultView: { getComputedStyle: node => ({ zoom: node.ownZoom }) } } };
+  const block = { tagName: 'TR', className: '', textContent: 'S1', offsetParent: null, getBoundingClientRect: () => ({ top: 115, height: 50 }), matches: () => false };
+  container.querySelectorAll = () => [block];
+  const result = reportBreakPoints(container);
+  assert.equal(result[0].start, 150); assert.equal(result[0].end, 250);
+  assert.equal(warnings.length, 1); assert.match(warnings[0], /offsetParent/);
+});

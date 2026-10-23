@@ -46,24 +46,44 @@ export function pageCanvasPlan(width, height, pageHeight, scale = 2, breakPoints
 
 // offsetTop/offsetHeight stay in layout pixels even while the preview uses CSS zoom.
 export function reportBreakPoints(container) {
-  const top = element => {
+  const elements = [...container.querySelectorAll('h2, h3, tr, .print-photo, .photo-card, .print-alert, .print-map, .point-print-table, .analysis-panel, footer')];
+  let ancestor = elements[0];
+  while (ancestor && ancestor !== container) ancestor = ancestor.offsetParent;
+  const useRect = elements.length > 0 && ancestor !== container;
+  let origin, zoom = 1;
+  if (useRect) {
+    console.warn('報告區塊的 offsetParent 鏈不含轉檔容器；改用相對 DOMRect 與 CSS zoom 量測。');
+    origin = container.getBoundingClientRect();
+    const view = container.ownerDocument?.defaultView;
+    for (let node = container; node; node = node.parentElement) {
+      const value = parseFloat(view?.getComputedStyle(node).zoom);
+      if (Number.isFinite(value) && value > 0) zoom *= value;
+    }
+  }
+  const bounds = element => {
+    if (useRect) {
+      const rect = element.getBoundingClientRect();
+      return { top: (rect.top - origin.top) / zoom, height: rect.height / zoom };
+    }
     let value = 0;
     for (let node = element; node && node !== container; node = node.offsetParent) value += node.offsetTop;
-    return value;
+    return { top: value, height: element.offsetHeight };
   };
   const label = element => {
     const index = [...container.querySelectorAll(element.tagName)].indexOf(element) + 1;
     return `${element.tagName.toLowerCase()}${element.className ? '.' + String(element.className).trim().replace(/\s+/g, '.') : ''}[${index}] ${element.textContent.trim().replace(/\s+/g, ' ').slice(0, 90)}`;
   };
-  return [...container.querySelectorAll('h2, h3, tr, .print-photo, .photo-card, .print-alert, .print-map, .point-print-table, .analysis-panel, footer')].flatMap(element => {
+  return elements.flatMap(element => {
     let following = element.matches('h2, h3') ? element.nextElementSibling : null;
     if (following) {
       let substantive = following;
       while (substantive && substantive.offsetHeight < 60) substantive = substantive.nextElementSibling;
       following = substantive || following;
     }
-    const block = { start: top(element), end: top(element) + element.offsetHeight, label: label(element) };
-    return following ? [block, { ...block, end: Math.max(block.end, top(following) + following.offsetHeight), label: `${block.label} + 首區塊` }] : [block];
+    const measured = bounds(element);
+    const block = { start: measured.top, end: measured.top + measured.height, label: label(element) };
+    const next = following ? bounds(following) : null;
+    return next ? [block, { ...block, end: Math.max(block.end, next.top + next.height), label: `${block.label} + 首區塊` }] : [block];
   });
 }
 

@@ -1093,7 +1093,7 @@ async function loadTestCase() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
   try {
-    const response = await fetch('./test-cases/v0.7.2/V072-PDF-30points-30photos.json', { signal: controller.signal, cache: 'no-cache' });
+    const response = await fetch('./test-cases/demo-case.json', { signal: controller.signal, cache: 'default' });
     if (!response.ok) throw new Error(`下載失敗（${response.status}），請稍後再試`);
     let contents = await response.text();
     if (demoModeEnabled) {
@@ -1105,7 +1105,7 @@ async function loadTestCase() {
       contents = JSON.stringify(backup);
     }
     clearTimeout(timeout);
-    if (await importBackup({ text: async () => contents }, true)) {
+    if (await importBackup(new File([contents], 'level-survey-demo.json', { type: 'application/json' }), true)) {
       switchTab('result');
       notify('已載入合成測試案件，可預覽成果總表或整份報告。');
     }

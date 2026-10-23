@@ -427,3 +427,15 @@ test('D2 replacement dialog distinguishes recorded and blank cases without expor
       : '目前案件尚無資料，繼續會以新案件取代。');
   }
 });
+
+test('D3 demonstration loading supplies a real JSON File and uses default HTTP caching', async () => {
+  const h = sampleLoaderHarness(); let request;
+  h.context.fetch = async (url, options) => { request = { url, cache: options.cache }; return { ok: true, text: async () => h.context.sampleContents }; };
+  h.run('importBackup = async file => { globalThis.sampleFile = file; return false; }');
+  await h.node('#loadTestCase').onclick();
+  assert.equal(request.url, './test-cases/demo-case.json'); assert.equal(request.cache, 'default');
+  assert.ok(h.context.sampleFile instanceof File);
+  assert.equal(h.context.sampleFile.name, 'level-survey-demo.json');
+  assert.equal(h.context.sampleFile.type, 'application/json');
+  assert.equal(await h.context.sampleFile.text(), h.context.sampleContents);
+});

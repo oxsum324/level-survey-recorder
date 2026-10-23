@@ -373,3 +373,41 @@ test('repeated sample clicks do not start parallel downloads', async () => {
   await pending;
   assert.equal(h.node('#loadTestCase').disabled, false);
 });
+
+test('D1 demo entry is hidden by default and shown only for demo=1', () => {
+  const h = appHarness();
+  for (const search of ['', '?release=0.7.4', '?demo=0', '?demo=true']) {
+    h.context.search = search; h.run('initializeDemoMode(search)');
+    assert.equal(h.node('#testTools').hidden, true);
+  }
+  h.run("initializeDemoMode('?release=0.7.4&demo=1')");
+  assert.equal(h.node('#testTools').hidden, false);
+});
+
+test('D1 demonstration loading marks and prefixes the case without duplicating the prefix', async () => {
+  for (const existingPrefix of [false, true]) {
+    const h = sampleLoaderHarness();
+    h.run("initializeDemoMode('?demo=1')");
+    if (existingPrefix) h.context.sampleContents = h.context.sampleContents.replace('合成測試案件', '【測試】合成測試案件');
+    await h.node('#loadTestCase').onclick();
+    assert.equal(h.run('project.demo'), true);
+    assert.equal(h.run('project.name'), '【測試】合成測試案件');
+    h.run('renderDemoState()'); assert.equal(h.node('#demoState').hidden, false);
+    h.run('project = blankProject(); renderDemoState()'); assert.equal(h.node('#demoState').hidden, true);
+  }
+});
+
+test('D1 both generated HTML reports and the delivered CSV warn on synthetic data only', async () => {
+  for (const demo of [false, true]) {
+    const h = caseWithReading(); h.context.testReports = []; h.context.demoFlag = demo;
+    h.run(`project.demo = demoFlag; caseFingerprint = async () => 'a'.repeat(64);
+      showPreview = report => testReports.push(report.innerHTML);
+      document.createElement = () => ({ innerHTML: '', querySelectorAll: () => [] });
+      deliverFile = async (name, blob) => { globalThis.csvContents = await blob.text(); globalThis.csvBytes = [...new Uint8Array(await blob.arrayBuffer())]; return true; };`);
+    h.node('#previewSheet').append = () => {}; h.node('#printPanel').remove = () => {};
+    await h.run('buildSummaryPreview()'); await h.run('buildReportPreview()'); await h.node('#exportCsv').onclick();
+    for (const html of h.context.testReports) assert.equal(html.includes('本案為合成測試資料，不得作為工程成果'), demo);
+    assert.equal(h.context.csvContents.includes('本案為合成測試資料，不得作為工程成果'), demo);
+    assert.deepEqual(h.context.csvBytes.slice(0, 3), [239, 187, 191]);
+  }
+});

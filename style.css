@@ -440,3 +440,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
 .measure-controls{grid-template-columns:minmax(0,1fr) auto calc(var(--touch-target) + 1px)}
 #measurePanel .next-point-line{grid-template-columns:calc(var(--touch-target) + 1px) minmax(0,1fr) calc(var(--touch-target) + 1px)}
+
+/* Keep the persistent demo marker beside save status without adding a header row. */
+.save-state-group{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.demo-badge{display:inline-block;background:var(--warn);color:var(--ink);padding:1px 5px;border-radius:99px;font-size:12px;font-weight:700;line-height:18px}
+@media(max-width:640px){.save-state-group{grid-row:1;grid-column:2;justify-self:end}.topbar .save-state-group #saveState{font-size:12px}.topbar:has(#demoState:not([hidden])) #offlineState{justify-self:start;max-width:90px}}

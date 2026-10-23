@@ -13,6 +13,16 @@ const validPosition = value => value && Number.isFinite(value.x) && Number.isFin
 const decimals = 'type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off"';
 const validReading = value => /^\d+(?:[.,]\d{1,5})?$/.test(String(value ?? '').trim());
 const DEFAULT_INSTRUMENT = 'PENTAX AP-128';
+const DEMO_WARNING = '本案為合成測試資料，不得作為工程成果';
+let demoModeEnabled = false;
+
+function initializeDemoMode(search = window.location?.search || '') {
+  demoModeEnabled = new URLSearchParams(search).getAll('demo').includes('1');
+  $('#testTools').hidden = !demoModeEnabled;
+}
+
+function renderDemoState() { $('#demoState').hidden = project.demo !== true; }
+const demoWarningHtml = () => project.demo === true ? `<p class="print-alert">${DEMO_WARNING}</p>` : '';
 const photoUrls = new Map();
 const equipmentPhotoUrls = new Map();
 let mapUrl = null;
@@ -1080,7 +1090,15 @@ async function loadTestCase() {
   try {
     const response = await fetch('./test-cases/v0.7.2/V072-PDF-30points-30photos.json', { signal: controller.signal, cache: 'no-cache' });
     if (!response.ok) throw new Error(`下載失敗（${response.status}），請稍後再試`);
-    const contents = await response.text();
+    let contents = await response.text();
+    if (demoModeEnabled) {
+      const backup = JSON.parse(contents);
+      if (!backup.project) throw new Error('測試案件資料不完整');
+      backup.project.demo = true;
+      const name = String(backup.project.name || '合成案件');
+      backup.project.name = name.includes('【測試】') ? name : `【測試】${name}`;
+      contents = JSON.stringify(backup);
+    }
     clearTimeout(timeout);
     if (await importBackup({ text: async () => contents }, true)) {
       switchTab('result');
@@ -1110,6 +1128,7 @@ function switchTab(name) {
 }
 
 function renderAll() {
+  renderDemoState();
   for (const tab of ['measure', 'result']) $(`.tabs [data-tab="${tab}"]`).hidden = !!project.photoTaskMode;
   $('#caseName').value = project.name || '';
   $('#caseNo').value = project.number || '';
@@ -1591,7 +1610,8 @@ function bindActions() {
   $('#exportBackup2').onclick = () => exportBackup();
   $('#shareBackup').onclick = () => exportBackup(true);
   const exportCsv = async share => {
-    const csv = buildSummaryCsv(project);
+    const rawCsv = buildSummaryCsv(project);
+    const csv = project.demo === true ? `\uFEFF"${DEMO_WARNING}"\r\n${rawCsv.replace(/^\uFEFF/, '')}` : rawCsv;
     const name = `${(project.number || project.name || '水準測量').replace(/[\\/:*?"<>|]/g, '_')}_水準測量成果總表.csv`;
     if (await deliverFile(name, new Blob([csv], { type: 'text/csv;charset=utf-8' }), share)) notify(`成果總表 CSV 已${share ? '分享' : '下載'}。`);
   };
@@ -1751,7 +1771,7 @@ async function buildSummaryPreview() {
   const report = document.createElement('section');
   report.id = 'printPanel';
   report.className = 'summary-print';
-  report.innerHTML = `<header class="print-title"><h1>水準測量成果總表</h1><p>案件：${safe(project.name || '未填')}　案號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　儀器觀測者：${safe(project.observer || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p><p>測線：${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}　起點${project.route.startHeightKind === 'assumed' ? '假設' : '已知'}高程：${formatHeight(result.startHeight)} m</p></header>
+  report.innerHTML = `<header class="print-title"><h1>水準測量成果總表</h1>${demoWarningHtml()}<p>案件：${safe(project.name || '未填')}　案號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　儀器觀測者：${safe(project.observer || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p><p>測線：${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}　起點${project.route.startHeightKind === 'assumed' ? '假設' : '已知'}高程：${formatHeight(result.startHeight)} m</p></header>
     <p class="summary-print-status"><strong>${summaryStatus(result)}</strong></p>${printTable(result)}
     <div class="summary-print-checks">${summaryChecks(result)}<span>實測終點 <strong>${formatHeight(result.rawEndHeight)} m</strong></span></div>
     <p>容許值依據：${safe(project.route.toleranceBasis || '未填')}。</p>${arithmeticSummary(result)}${sightBalanceSummary(result)}
@@ -1782,7 +1802,7 @@ async function buildReportPreview() {
   const status = result.withinTolerance === true ? '符合輸入容許值' : result.withinTolerance === false ? '超出容許值，未進行改正' : '尚未完成閉合檢核';
   const report = document.createElement('section');
   report.id = 'printPanel';
-  report.innerHTML = `<header class="print-title"><small>水準測量現場紀錄 V${VERSION}</small><h1>${safe(project.name || '水準測量成果')}</h1><p>案件編號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}　儀器觀測者：${safe(project.observer || '未填')}　扶尺人員：${safe(project.rodHolder || '未填')}　攝影者：${safe(project.photographer || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p><p>天氣：${safe([project.environment.weather, project.environment.weatherOther].filter(Boolean).join('／') || '未填')}　氣溫：${safe(project.environment.temperature || '未填')} °C　觀測開始：${safe(dateTime(project.environment.start) || '未填')}　觀測結束：${safe(dateTime(project.environment.end) || '未填')}</p><p>現場備註：${safe(project.environment.notes || '未填')}</p></header>
+  report.innerHTML = `<header class="print-title"><small>水準測量現場紀錄 V${VERSION}</small><h1>${safe(project.name || '水準測量成果')}</h1>${demoWarningHtml()}<p>案件編號：${safe(project.number || '未填')}　測量日期：${safe(project.date || '未填')}　儀器觀測者：${safe(project.observer || '未填')}　扶尺人員：${safe(project.rodHolder || '未填')}　攝影者：${safe(project.photographer || '未填')}</p><p>儀器：${safe(project.instrument || '未填')}　高程基準／來源：${safe(project.datum || '未填')}</p><p>天氣：${safe([project.environment.weather, project.environment.weatherOther].filter(Boolean).join('／') || '未填')}　氣溫：${safe(project.environment.temperature || '未填')} °C　觀測開始：${safe(dateTime(project.environment.start) || '未填')}　觀測結束：${safe(dateTime(project.environment.end) || '未填')}</p><p>現場備註：${safe(project.environment.notes || '未填')}</p></header>
     <h2>一、測線與點位</h2><p>測線：${safe(code(project.route.startId))} → ${safe(code(project.route.endId))}；起點${project.route.startHeightKind === 'assumed' ? '假設' : '已知'}高程：${formatHeight(result.startHeight)} m；${project.route.startId === project.route.endId ? '回測起點高程' : '終點已知高程'}：${formatHeight(result.endHeight)} m。</p>
     <p>約略地址／路名：${safe(project.approxLocation || '未填')}。底圖來源：${safe(project.mapSource || '未填')}。位置圖僅供示意，不作測線長度量測。</p>${map}
     <p class="print-note">下表與圖上標記僅列有觀測讀數的點位；未使用的預排點位不列入成果。</p>
@@ -1812,6 +1832,7 @@ async function buildReportPreview() {
 }
 
 async function main() {
+  initializeDemoMode();
   try {
     project = await loadProject() || blankProject();
     if (!project.schema || project.schema !== 1) throw new Error('本機案件格式不受此版本支援。');

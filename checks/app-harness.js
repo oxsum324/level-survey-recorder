@@ -21,7 +21,7 @@ export function appHarness(overrides = {}) {
   };
   const context = vm.createContext({
     ...calc, ...store, ...audit, ...integrity, ...exif, ...observation, ...pdfPages,
-    crypto, Blob, File, URL, Date, structuredClone, TextEncoder,
+    crypto, Blob, File, URL, URLSearchParams, Date, structuredClone, TextEncoder,
     setTimeout: () => 1, clearTimeout() {}, confirm: () => true,
     document: {
       querySelector: node, querySelectorAll: () => [],

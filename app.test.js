@@ -439,3 +439,9 @@ test('D3 demonstration loading supplies a real JSON File and uses default HTTP c
   assert.equal(h.context.sampleFile.type, 'application/json');
   assert.equal(await h.context.sampleFile.text(), h.context.sampleContents);
 });
+
+test('D6 the results disclosure includes the same intermediate-sight correction method as reports', () => {
+  const h = caseWithReading(); h.run('renderResult()');
+  assert.ok(h.node('#resultNote').textContent.includes('中間視改正後高程＝改正後儀器視線高 − 中間視讀數；改正後儀器視線高採該測站後視點的改正後高程加後視讀數，不在站內按距離分配。'));
+  assert.ok(h.node('#resultNote').textContent.includes('此處為單一測線的簡易閉合差分配，不代表控制網整體平差。'));
+});

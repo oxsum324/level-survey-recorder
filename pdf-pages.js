@@ -99,7 +99,9 @@ export async function renderPagedPdf(report, options, { onProgress = () => {}, i
     const width = container.getBoundingClientRect().width;
     const pageHeight = pageSize.inner.px.height;
     const blocks = reportBreakPoints(container);
-    const plan = pageCanvasPlan(width, container.scrollHeight, pageHeight, options.html2canvas.scale, blocks);
+    // Rounded offset geometry can extend one pixel beyond scrollHeight. Include the whole last block.
+    const height = Math.ceil(Math.max(container.scrollHeight, ...blocks.map(block => block.end)));
+    const plan = pageCanvasPlan(width, height, pageHeight, options.html2canvas.scale, blocks);
     const laidOut = container.firstElementChild.cloneNode(true);
     layoutOverlay.remove(); layoutOverlay = null;
     const seed = document.createElement('canvas'); seed.width = 1; seed.height = 1;

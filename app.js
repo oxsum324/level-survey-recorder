@@ -694,6 +694,7 @@ function renderResult() {
     result.withinTolerance === false ? '閉合差超限，不執行自動改正；請核對原始讀數與點位。' : '',
     result.riseFallCheck.ok === false ? '高差法算術複核不一致，暫停自動改正。' : '',
     '此處為單一測線的簡易閉合差分配，不代表控制網整體平差。',
+    INTERMEDIATE_ADJUSTMENT_NOTE,
   ].filter(Boolean).join(' ');
   return result;
 }

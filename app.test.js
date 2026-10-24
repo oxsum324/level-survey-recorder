@@ -434,7 +434,7 @@ test('D3 demonstration loading supplies a real JSON File and uses default HTTP c
   h.context.fetch = async (url, options) => { request = { url, cache: options.cache }; return { ok: true, text: async () => h.context.sampleContents }; };
   h.run('importBackup = async file => { globalThis.sampleFile = file; return false; }');
   await h.node('#loadTestCase').onclick();
-  assert.equal(request.url, './test-cases/demo-case.json'); assert.equal(request.cache, 'default');
+  assert.equal(request.url, `./test-cases/demo-case.json?release=${h.context.VERSION}`); assert.equal(request.cache, 'default');
   assert.ok(h.context.sampleFile instanceof File);
   assert.equal(h.context.sampleFile.name, 'level-survey-demo.json');
   assert.equal(h.context.sampleFile.type, 'application/json');

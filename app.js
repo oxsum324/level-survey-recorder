@@ -1098,7 +1098,7 @@ async function loadTestCase() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
   try {
-    const response = await fetch('./test-cases/demo-case.json', { signal: controller.signal, cache: 'default' });
+    const response = await fetch(`./test-cases/demo-case.json?release=${VERSION}`, { signal: controller.signal, cache: 'default' });
     if (!response.ok) throw new Error(`下載失敗（${response.status}），請稍後再試`);
     let contents = await response.text();
     if (demoModeEnabled) {

@@ -52,6 +52,86 @@ test('L5 schema 2 and missing schema are rejected before a case can be replaced'
   }
 });
 
+test('backup rejects malformed structural entries before returning a project', () => {
+  const malformedProjects = [
+    { ...project, equipmentPhotos: [], points: [null] },
+    { ...project, equipmentPhotos: [], setups: [null] },
+    { ...project, equipmentPhotos: [], setups: [{ intermediate: [null] }] },
+    { ...project, equipmentPhotos: [], photos: [null] },
+    { ...project, equipmentPhotos: [null] },
+    { ...project, equipmentPhotos: [], route: null },
+    { ...project, equipmentPhotos: [], route: [] },
+  ];
+  for (const malformed of malformedProjects) {
+    assert.throws(() => parseBackup(JSON.stringify({ format: 'level-survey-case.v1', project: malformed, media: [] })));
+  }
+});
+
+test('backup keeps incomplete observations, unset route IDs and minimal legacy photos importable', () => {
+  const legacy = {
+    schema: 1,
+    points: [{ id: 'bm1', code: 'BM1', type: 'BM' }],
+    setups: [{ bs: '', fs: '', intermediate: [] }],
+    photos: [{ mediaId: 'legacy-photo' }],
+    route: {},
+  };
+  const restored = parseBackup(JSON.stringify({ format: 'level-survey-case.v1', project: legacy, media: [{ id: 'legacy-photo', dataUrl: image }] }));
+  assert.equal(restored.project.setups[0].bs, '');
+  assert.deepEqual(restored.project.setups[0].intermediate, []);
+  assert.deepEqual(restored.project.route, {});
+  assert.deepEqual(restored.project.photos, [{ mediaId: 'legacy-photo' }]);
+});
+
+test('backup rejects invalid optional text, point references, duplicate IDs and photo media IDs', () => {
+  const malformedProjects = [
+    { ...project, equipmentPhotos: [], instrument: 17, instrumentDefaultApplied: true },
+    { ...project, equipmentPhotos: [], name: [] },
+    { ...project, equipmentPhotos: [], points: [...project.points, { ...project.points[0] }] },
+    { ...project, equipmentPhotos: [], setups: [{ bsPointId: 4 }] },
+    { ...project, equipmentPhotos: [], setups: [{ intermediate: [{ pointId: {} }] }] },
+    { ...project, equipmentPhotos: [], photos: [{ mediaId: '' }] },
+    { ...project, equipmentPhotos: [{ mediaId: null }] },
+  ];
+  for (const malformed of malformedProjects) {
+    assert.throws(() => parseBackup(JSON.stringify({ format: 'level-survey-case.v1', project: malformed, media: [] })));
+  }
+});
+
+test('backup rejects non-string media data URLs before parsing them', () => {
+  assert.throws(() => parseBackup(JSON.stringify({
+    format: 'level-survey-case.v1', project: { ...project, equipmentPhotos: [] },
+    media: [{ id: 'media-1', dataUrl: [image] }],
+  })), error => error instanceof Error && !(error instanceof TypeError));
+});
+
+test('backup accepts empty point selections and legacy photos without id or name', () => {
+  const legacy = {
+    schema: 1, points: [{ id: 'bm1', code: 'BM1', type: 'BM' }],
+    setups: [{ bsPointId: '', fsPointId: null, intermediate: [{ pointId: '' }] }],
+    photos: [{ mediaId: 'legacy-photo' }], equipmentPhotos: [{ mediaId: 'legacy-equipment' }], route: {},
+  };
+  const media = ['legacy-photo', 'legacy-equipment'].map(id => ({ id, dataUrl: image }));
+  const restored = parseBackup(JSON.stringify({ format: 'level-survey-case.v1', project: legacy, media }));
+  assert.equal(restored.project.setups[0].bsPointId, '');
+  assert.equal(restored.project.setups[0].intermediate[0].pointId, '');
+  assert.deepEqual(restored.project.photos, [{ mediaId: 'legacy-photo' }]);
+  assert.deepEqual(restored.project.equipmentPhotos, [{ mediaId: 'legacy-equipment' }]);
+});
+
+test('backup rejects malformed optional objects and collections used by rendering', () => {
+  for (const malformed of [
+    { ...project, equipmentPhotos: [], instrumentCheck: 'invalid' },
+    { ...project, equipmentPhotos: [], instrumentCheck: { twoPeg: [] } },
+    { ...project, equipmentPhotos: [], environment: [] },
+    { ...project, equipmentPhotos: [], pointPlan: [] },
+    { ...project, equipmentPhotos: [], checklist: { items: [null] } },
+    { ...project, equipmentPhotos: [], auditLog: [null] },
+    { ...project, equipmentPhotos: [], routeHistory: [null] },
+  ]) {
+    assert.throws(() => parseBackup(JSON.stringify({ format: 'level-survey-case.v1', project: malformed, media: [] })));
+  }
+});
+
 test('L8 segmented output has the same parsed meaning as the original writer and can be imported', async () => {
   const target = { ...project, name: '中文案件', mapMediaId: 'map', photos: [{ mediaId: 'photo' }, { mediaId: 'map' }], equipmentPhotos: [{ mediaId: 'equipment' }] };
   const media = new Map(['map', 'photo', 'equipment'].map(id => [id, new Blob([id], { type: 'image/jpeg' })]));
@@ -96,4 +176,11 @@ test('historical V0.7.0 creation defaults preserve readings, schema and backup f
   assert.equal(restored.project.schema, 1);
   assert.deepEqual(restored.project.setups, backup.project.setups);
   assert.equal(restored.project.setups[0].bsAt, undefined);
+});
+
+test('backup rejects missing point references and duplicated observation identities', () => {
+  const base={...project,equipmentPhotos:[],setups:[{bsPointId:'bm1',fsPointId:'bm1',intermediate:[],bsObservationId:'obs-1',fsObservationId:'obs-1'}]};
+  assert.throws(()=>parseBackup(JSON.stringify({format:'level-survey-case.v1',project:base,media:[]})),/觀測識別碼/);
+  const missing={...base,setups:[{bsPointId:'missing',intermediate:[]}]};
+  assert.throws(()=>parseBackup(JSON.stringify({format:'level-survey-case.v1',project:missing,media:[]})),/不存在的點位/);
 });

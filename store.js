@@ -104,12 +104,55 @@ export function parseBackup(contents) {
   }
   const project = backup.project;
   if (project.schema !== 1) throw new Error(`此案件檔格式（schema ${String(project.schema)}）不受 V${VERSION} 支援`);
-  if (!Array.isArray(project.points) || !Array.isArray(project.setups) || !Array.isArray(project.photos) || (project.equipmentPhotos !== undefined && !Array.isArray(project.equipmentPhotos)) || !project.route) {
-    throw new Error('案件資料結構不完整。');
+  const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const isRecordArray = value => Array.isArray(value) && value.every(isRecord);
+  const optionalRecord = value => value === undefined || value === null || isRecord(value);
+  const optionalRecordArray = value => value === undefined || isRecordArray(value);
+  const optionalString = value => value === undefined || value === null || typeof value === 'string';
+  const selectedPointId = value => value === undefined || value === null || value === '' || typeof value === 'string';
+  const textFields = ['name', 'number', 'date', 'observer', 'rodHolder', 'photographer', 'instrument', 'datum', 'approxLocation', 'householdNo', 'address', 'orgName', 'mapSource'];
+  const pointIds = new Set();
+  const validPoints = Array.isArray(project.points) && project.points.every(point => {
+    if (!isRecord(point) || typeof point.id !== 'string' || !point.id || typeof point.code !== 'string' || typeof point.type !== 'string' || pointIds.has(point.id)) return false;
+    pointIds.add(point.id);
+    return true;
+  });
+  const hasValidShape = validPoints
+    && textFields.every(key => optionalString(project[key]))
+    && (typeof project.instrument === 'string' || (project.instrument == null && project.instrumentDefaultApplied !== true))
+    && isRecordArray(project.setups)
+    && project.setups.every(setup => selectedPointId(setup.bsPointId) && selectedPointId(setup.fsPointId)
+      && (setup.intermediate === undefined || (isRecordArray(setup.intermediate) && setup.intermediate.every(sight => selectedPointId(sight.pointId)))))
+    && isRecordArray(project.photos)
+    && (project.equipmentPhotos === undefined || isRecordArray(project.equipmentPhotos))
+    && isRecord(project.route)
+    && selectedPointId(project.route.startId) && selectedPointId(project.route.endId)
+    && selectedPointId(project.mapMediaId)
+    && [...project.photos, ...(project.equipmentPhotos || [])].every(photo => typeof photo.mediaId === 'string' && photo.mediaId.length > 0)
+    && optionalRecord(project.pointPlan)
+    && optionalRecord(project.instrumentCheck)
+    && (project.instrumentCheck?.twoPeg === undefined || project.instrumentCheck.twoPeg === null || isRecord(project.instrumentCheck.twoPeg))
+    && optionalRecord(project.environment)
+    && optionalRecord(project.checklist)
+    && (project.checklist?.items === undefined || isRecordArray(project.checklist.items))
+    && optionalRecordArray(project.auditLog)
+    && optionalRecordArray(project.routeHistory)
+    && (project.routeHistory === undefined || project.routeHistory.every(item => typeof item.at === 'string'));
+  if (!hasValidShape) throw new Error('案件資料結構不完整。');
+  const observationIds = new Set();
+  for (const setup of project.setups) {
+    const references = [setup.bsPointId, setup.fsPointId, ...(setup.intermediate || []).map(sight => sight.pointId)];
+    if (references.some(id => id && !pointIds.has(id))) throw new Error('測站參照不存在的點位。');
+    const values = [setup.bsObservationId, setup.fsObservationId, setup.distanceObservationId, ...(setup.intermediate || []).map(sight => sight.observationId)];
+    for (const id of values) if (id !== undefined && id !== null) {
+      if (typeof id !== 'string' || !id || observationIds.has(id)) throw new Error('觀測識別碼無效或重複。');
+      observationIds.add(id);
+    }
   }
+  if ([project.route.startId, project.route.endId].some(id => id && !pointIds.has(id))) throw new Error('測線參照不存在的點位。');
   const ids = new Set();
   const media = backup.media.map(item => {
-    if (!item || typeof item.id !== 'string' || ids.has(item.id) || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(item.dataUrl)) {
+    if (!item || typeof item.id !== 'string' || !item.id || ids.has(item.id) || typeof item.dataUrl !== 'string' || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(item.dataUrl)) {
       throw new Error('案件圖像資料無效。');
     }
     ids.add(item.id);

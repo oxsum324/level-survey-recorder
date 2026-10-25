@@ -3,7 +3,7 @@ import { loadProject, saveProject, saveMedia, loadMedia, deleteMedia, replacePro
 import { resolveObservedEdit, actionEntry, pointDeletionEntry, auditReportEntry } from './audit.js';
 import { fingerprint, sha256Blob } from './integrity.js';
 import { captureTime } from './exif.js';
-import { setFirstObservedAt } from './observation.js';
+import { setFirstObservedAt, ensureObservationId, correctionEntries, legacyCorrectionNotice } from './observation.js';
 import { renderPagedPdf } from './pdf-pages.js';
 
 const $ = selector => document.querySelector(selector);
@@ -32,6 +32,8 @@ let mapUrl = null;
 let project;
 let saveTimer;
 let saveQueue = Promise.resolve();
+let mediaQueue = Promise.resolve();
+let caseTransition = false;
 let placingPointId = null;
 let draftNextPointId = '';
 let draftPointManual = false;
@@ -62,29 +64,31 @@ function blankProject() {
   };
 }
 
-function normalizeProject() {
+function normalizeProject(candidate = project) {
   let changed = false;
-  for (const key of ['householdNo', 'address', 'orgName']) if (project[key] === undefined) project[key] = '';
-  if (!Array.isArray(project.equipmentPhotos)) { project.equipmentPhotos = []; changed = true; }
-  if (!project.instrumentDefaultApplied) {
-    if (!project.instrument) project.instrument = DEFAULT_INSTRUMENT;
-    project.instrumentDefaultApplied = true;
+  for (const key of ['name', 'number', 'date', 'observer', 'instrument', 'datum', 'approxLocation', 'mapSource', 'rodHolder', 'photographer']) if (candidate[key] == null) { candidate[key] = ''; changed = true; }
+  for (const setup of candidate.setups) if (setup.intermediate === undefined) { setup.intermediate = []; changed = true; }
+  for (const key of ['householdNo', 'address', 'orgName']) if (candidate[key] === undefined) candidate[key] = '';
+  if (!Array.isArray(candidate.equipmentPhotos)) { candidate.equipmentPhotos = []; changed = true; }
+  if (!candidate.instrumentDefaultApplied) {
+    if (!candidate.instrument) candidate.instrument = DEFAULT_INSTRUMENT;
+    candidate.instrumentDefaultApplied = true;
     changed = true;
   }
-  if (!project.route.startHeightKind) { project.route.startHeightKind = 'known'; changed = true; }
-  if (project.route.staffLengthM === undefined) { project.route.staffLengthM = '5'; changed = true; }
-  if (project.route.stadiaConstantK === undefined) { project.route.stadiaConstantK = '100'; changed = true; }
-  if (!project.instrumentCheck) { project.instrumentCheck = { serial: '', calibrationDate: '', calibrationAgency: '', twoPeg: { a1: '', b1: '', a2: '', b2: '', distanceM: '' } }; changed = true; }
-  if (!project.instrumentCheck.twoPeg) { project.instrumentCheck.twoPeg = { a1: '', b1: '', a2: '', b2: '', distanceM: '' }; changed = true; }
-  if (project.rodHolder === undefined) { project.rodHolder = ''; changed = true; }
-  if (project.photographer === undefined) { project.photographer = ''; changed = true; }
-  if (!project.pointPlan) { project.pointPlan = { sCount: String(project.points.filter(item => item.type === 'S').length), tpCount: String(project.points.filter(item => item.type === 'TP').length) }; changed = true; }
-  if (!Array.isArray(project.auditLog)) { project.auditLog = []; changed = true; }
-  if (!project.environment) { project.environment = { weather: '', temperature: '', start: '', end: '', notes: '' }; changed = true; }
-  if (!project.checklist) { project.checklist = { items: checklistDefaults.map(label => ({ label, status: '' })), notes: '' }; changed = true; }
-  if (!Array.isArray(project.checklist.items)) { project.checklist.items = checklistDefaults.map(label => ({ label, status: '' })); changed = true; }
-  if (project.lastModifiedAt === undefined) { project.lastModifiedAt = project.updatedAt || stamp(); changed = true; }
-  if (project.lastExportedAt === undefined) { project.lastExportedAt = ''; changed = true; }
+  if (!candidate.route.startHeightKind) { candidate.route.startHeightKind = 'known'; changed = true; }
+  if (candidate.route.staffLengthM === undefined) { candidate.route.staffLengthM = '5'; changed = true; }
+  if (candidate.route.stadiaConstantK === undefined) { candidate.route.stadiaConstantK = '100'; changed = true; }
+  if (!candidate.instrumentCheck) { candidate.instrumentCheck = { serial: '', calibrationDate: '', calibrationAgency: '', twoPeg: { a1: '', b1: '', a2: '', b2: '', distanceM: '' } }; changed = true; }
+  if (!candidate.instrumentCheck.twoPeg) { candidate.instrumentCheck.twoPeg = { a1: '', b1: '', a2: '', b2: '', distanceM: '' }; changed = true; }
+  if (candidate.rodHolder === undefined) { candidate.rodHolder = ''; changed = true; }
+  if (candidate.photographer === undefined) { candidate.photographer = ''; changed = true; }
+  if (!candidate.pointPlan) { candidate.pointPlan = { sCount: String(candidate.points.filter(item => item.type === 'S').length), tpCount: String(candidate.points.filter(item => item.type === 'TP').length) }; changed = true; }
+  if (!Array.isArray(candidate.auditLog)) { candidate.auditLog = []; changed = true; }
+  if (!candidate.environment) { candidate.environment = { weather: '', temperature: '', start: '', end: '', notes: '' }; changed = true; }
+  if (!candidate.checklist) { candidate.checklist = { items: checklistDefaults.map(label => ({ label, status: '' })), notes: '' }; changed = true; }
+  if (!Array.isArray(candidate.checklist.items)) { candidate.checklist.items = checklistDefaults.map(label => ({ label, status: '' })); changed = true; }
+  if (candidate.lastModifiedAt === undefined) { candidate.lastModifiedAt = candidate.updatedAt || stamp(); changed = true; }
+  if (candidate.lastExportedAt === undefined) { candidate.lastExportedAt = ''; changed = true; }
   return changed;
 }
 
@@ -160,6 +164,47 @@ function queueSave(immediate = false, modified = true, preserveUndo = false) {
   }, immediate ? 0 : 300);
 }
 
+async function persistCurrentCase(owner = project) {
+  clearTimeout(saveTimer);
+  const snapshot = structuredClone(owner);
+  const pending = saveQueue.then(() => saveProject(snapshot));
+  saveQueue = pending.catch(() => {});
+  await pending;
+  $('#saveState').textContent = '已儲存於此裝置';
+}
+
+function enqueueMedia(action) {
+  if (caseTransition) { notify('案件切換中，請完成後再加入圖片。', true); return Promise.resolve(false); }
+  const owner = project;
+  const task = mediaQueue.then(async () => {
+    await action(owner);
+    await persistCurrentCase(owner);
+    return true;
+  });
+  mediaQueue = task.catch(error => { notify(`媒體作業未完成：${error.message}`, true); return false; });
+  return mediaQueue;
+}
+
+async function transitionCase(action) {
+  if (caseTransition || editPending) { notify('請先完成目前的案件操作。', true); return false; }
+  caseTransition = true;
+  const controls = [...document.querySelectorAll('main input, main select, main textarea, main button')].map(control => [control, control.disabled]);
+  for (const [control] of controls) control.disabled = true;
+  try {
+    await mediaQueue;
+    await persistCurrentCase();
+    return await action();
+  } catch (error) { notify(`案件切換失敗：${error.message}`, true); return false; }
+  finally {
+    caseTransition = false;
+    for (const [control, disabled] of controls) control.disabled = disabled;
+  }
+}
+
+function observationIdentity(item, field, pointId) {
+  return { observationId: ensureObservationId(item, field, uid), pointId };
+}
+
 function renderChecklist() {
   $('#checklistItems').innerHTML = project.checklist.items.map((item, index) => `<div class="checklist-row"><strong>${safe(item.label)}${index === 1 && Object.values(project.instrumentCheck?.twoPeg || {}).some(Boolean) ? ' · 已填兩樁法紀錄' : ''}</strong><select data-check-status="${index}"><option value="">未選</option><option value="done" ${item.status === 'done' ? 'selected' : ''}>已執行</option><option value="pending" ${item.status === 'pending' ? 'selected' : ''}>未執行</option><option value="na" ${item.status === 'na' ? 'selected' : ''}>不適用</option></select></div>`).join('');
   $('#checklistNotes').value = project.checklist.notes || '';
@@ -172,6 +217,7 @@ function renderEnvironment() {
 function observedTimestamp(item, key, from, to) {
   const at = stamp();
   if (setFirstObservedAt(item, key, from, to, at)) {
+    ensureObservationId(item, key, uid);
     updateEnvironmentTimes(at);
     const keys = initialEntries.get(item) || new Set(); keys.add(key); initialEntries.set(item, keys);
   }
@@ -201,9 +247,10 @@ function pushUndo(label, station, pointCode, field, from, to) {
   undoTimer = setTimeout(() => { $('#undoToast').hidden = true; }, 10000);
 }
 
-function logAction(type, station, pointCode, field, from, to, reason) {
+function logAction(type, station, pointCode, field, from, to, reason, identity = {}) {
   const entry = actionEntry({ id: uid(), at: stamp(), type, station, pointCode, field, from, to, reason });
   entry.pointId = project.points.find(item => item.code === pointCode)?.id;
+  Object.assign(entry, identity);
   project.auditLog.push(entry);
 }
 
@@ -478,7 +525,7 @@ function applyMmCorrection(input, correction) {
   const address = readingAddress(input);
   if (address) {
     const from = String(address.item[address.key] ?? '');
-    if (from && !initialEntries.get(address.item)?.has(address.key)) logAction('edit', address.station, address.pointCode, address.key, from, correction, '單位誤植（mm→m）');
+    if (from && !initialEntries.get(address.item)?.has(address.key)) logAction('edit', address.station, address.pointCode, address.key, from, correction, '單位誤植（mm→m）', observationIdentity(address.item, address.key, address.item.pointId || address.item[address.key.startsWith('bs') ? 'bsPointId' : 'fsPointId']));
     address.item[address.key] = correction;
     initialEntries.get(address.item)?.delete(address.key);
     input.value = correction;
@@ -499,11 +546,11 @@ function wireFields(setup, index, role, sightIndex = null) {
   const attr = key => sightIndex === null ? `data-wire-field="${key}" data-station="${index}"` : `data-is-wire="${index}:${sightIndex}:${key}"`;
   const check = sightIndex === null ? `${index}:${role}` : `${index}:is:${sightIndex}`;
   const pointCode = code(sightIndex === null ? setup[role === 'bs' ? 'bsPointId' : 'fsPointId'] : item.pointId);
-  return `<details class="wire-details"><summary>上絲／下絲（選填）</summary><div class="wire-fields"><div class="reading-value"><label>上絲（m）<input ${decimals} ${attr(upperKey)} value="${safe(item[upperKey])}" placeholder="0.000"></label><small class="reading-warning" hidden></small>${correctionNote(index + 1, pointCode, upperKey)}</div><div class="reading-value"><label>下絲（m）<input ${decimals} ${attr(lowerKey)} value="${safe(item[lowerKey])}" placeholder="0.000"></label><small class="reading-warning" hidden></small>${correctionNote(index + 1, pointCode, lowerKey)}</div></div><p class="wire-check" data-wire-check="${check}" hidden></p></details>`;
+  return `<details class="wire-details"><summary>上絲／下絲（選填）</summary><div class="wire-fields"><div class="reading-value"><label>上絲（m）<input ${decimals} ${attr(upperKey)} value="${safe(item[upperKey])}" placeholder="0.000"></label><small class="reading-warning" hidden></small>${correctionNote(index + 1, pointCode, upperKey, item)}</div><div class="reading-value"><label>下絲（m）<input ${decimals} ${attr(lowerKey)} value="${safe(item[lowerKey])}" placeholder="0.000"></label><small class="reading-warning" hidden></small>${correctionNote(index + 1, pointCode, lowerKey, item)}</div></div><p class="wire-check" data-wire-check="${check}" hidden></p></details>`;
 }
 
-function correctionNote(station, pointCode, field) {
-  const entries = project.auditLog.filter(item => item.type === 'edit' && item.station === station && (item.pointCode === pointCode || (field === 'pointId' || field === 'fsPointId') && item.to === pointCode) && item.field === field);
+function correctionNote(station, pointCode, field, observation) {
+  const entries = correctionEntries(project, station, pointCode, field, observation);
   return entries.length ? `<details class="correction-history"><summary>※已更正</summary>${entries.map(item => `<p>${safe(dateTime(item.at))}　<del>${safe(item.from)}</del> → ${safe(item.to)}　${safe(item.reason)}</p>`).join('')}</details>` : '';
 }
 
@@ -542,23 +589,23 @@ function renderStations() {
     const active = index === project.setups.length - 1;
     const waitingForNext = active && !setup.fsPointId && setup.fs === '';
     const recorded = (setup.intermediate || []).map((sight, sightIndex) => `<div class="reading-row"><span class="reading-role">中間視 IS</span>
-      <div><label>點位<select data-is-point="${index}:${sightIndex}">${options(project.points, sight.pointId)}</select></label>${correctionNote(index + 1, code(sight.pointId), 'pointId')}</div>
-      <div class="reading-value"><label>讀數（m）<input ${decimals} data-reading data-is-value="${index}:${sightIndex}" value="${safe(sight.value)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-is-inverted="${index}:${sightIndex}" ${sight.inverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(sight.pointId), 'value')}${correctionNote(index + 1, code(sight.pointId), 'inverted')}</div>
+      <div><label>點位<select data-is-point="${index}:${sightIndex}">${options(project.points, sight.pointId)}</select></label>${correctionNote(index + 1, code(sight.pointId), 'pointId', sight)}</div>
+      <div class="reading-value"><label>讀數（m）<input ${decimals} data-reading data-is-value="${index}:${sightIndex}" value="${safe(sight.value)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-is-inverted="${index}:${sightIndex}" ${sight.inverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(sight.pointId), 'value', sight)}${correctionNote(index + 1, code(sight.pointId), 'inverted', sight)}</div>
       <small class="raw-height">暫算高程 ${formatHeight(computed.stations[index]?.intermediate[sightIndex]?.rawHeight)} m（未改正）</small><div class="reading-actions"><button type="button" data-field-map="${safe(sight.pointId)}">標圖</button>${active && sightIndex === setup.intermediate.length - 1 && !setup.fsPointId ? `<button type="button" data-convert-is="${index}:${sightIndex}">改為前視</button>` : ''}<button type="button" data-remove-is="${index}:${sightIndex}" class="quiet danger-text">移除</button></div>${wireFields(setup, index, 'is', sightIndex)}</div>`).join('') +
     (setup.fsPointId || setup.fs !== '' ? `<div class="reading-row turn-row"><span class="reading-role">前視 FS</span>
-      <div><label>點位<select data-field="fsPointId" data-station="${index}">${options(project.points, setup.fsPointId)}</select></label>${correctionNote(index + 1, code(setup.fsPointId), 'fsPointId')}</div>
-      <div class="reading-value"><label>讀數（m）<input ${decimals} data-reading data-field="fs" data-station="${index}" value="${safe(setup.fs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="fsInverted" data-station="${index}" ${setup.fsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(setup.fsPointId), 'fs')}${correctionNote(index + 1, code(setup.fsPointId), 'fsInverted')}</div>
+      <div><label>點位<select data-field="fsPointId" data-station="${index}">${options(project.points, setup.fsPointId)}</select></label>${correctionNote(index + 1, code(setup.fsPointId), 'fsPointId', setup)}</div>
+      <div class="reading-value"><label>讀數（m）<input ${decimals} data-reading data-field="fs" data-station="${index}" value="${safe(setup.fs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="fsInverted" data-station="${index}" ${setup.fsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(setup.fsPointId), 'fs', setup)}${correctionNote(index + 1, code(setup.fsPointId), 'fsInverted', setup)}</div>
       <small class="raw-height">暫算高程 ${formatHeight(computed.stations[index]?.rawEndHeight)} m（未改正）</small><div class="reading-actions"><button type="button" data-field-map="${safe(setup.fsPointId)}">標圖</button>${active ? `<button type="button" data-convert-fs="${index}" class="quiet">改為中間視</button>` : ''}</div>${wireFields(setup, index, 'fs')}</div>` : '');
     return `<section class="card station ${active ? 'active-station' : ''}" data-station="${index}">
       <div class="station-head"><div class="station-heading"><h3>測站 ${index + 1}</h3></div></div>
-      <div class="bs-entry reading-value"><label>後視 BS · ${safe(code(setup.bsPointId))}<input ${decimals} data-reading data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="bsInverted" data-station="${index}" ${setup.bsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(setup.bsPointId), 'bs')}${correctionNote(index + 1, code(setup.bsPointId), 'bsInverted')}</div>
+      <div class="bs-entry reading-value"><label>後視 BS · ${safe(code(setup.bsPointId))}<input ${decimals} data-reading data-field="bs" data-station="${index}" value="${safe(setup.bs)}" placeholder="0.000"></label><label class="inverted-toggle"><input type="checkbox" data-inverted="bsInverted" data-station="${index}" ${setup.bsInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small>${correctionNote(index + 1, code(setup.bsPointId), 'bs', setup)}${correctionNote(index + 1, code(setup.bsPointId), 'bsInverted', setup)}</div>
       ${wireFields(setup, index, 'bs')}
       ${waitingForNext ? `<div class="next-reading"><div class="next-point-label">下一點</div><div class="next-point-line"><button type="button" data-cycle-point="-1" aria-label="前一個點位">‹</button><button type="button" id="nextPointPicker" aria-haspopup="dialog">${safe(code(draftNextPointId))} · ${observedPointIds().has(draftNextPointId) ? '已觀測／回測' : '未觀測'} ▾</button><button type="button" data-cycle-point="1" aria-label="後一個點位">›</button><input type="hidden" id="nextPoint" value="${safe(draftNextPointId)}"></div>
         <div class="next-value-line"><label>讀法<select id="nextRole"><option value="IS" ${draftNextRole === 'IS' ? 'selected' : ''}>中間視 · 同站</option><option value="MOVE" ${draftNextRole === 'MOVE' ? 'selected' : ''}>前視 · 換站</option><option value="FINISH" ${draftNextRole === 'FINISH' ? 'selected' : ''}>前視 · 終點</option></select></label><div class="reading-value"><label>讀數（m）<input id="nextReading" data-reading ${decimals.replace('enterkeyhint="next"', 'enterkeyhint="done"')} value="${safe(draftNextValue)}" placeholder="0.000"></label><label class="inverted-toggle"><input id="nextInverted" type="checkbox" ${draftNextInverted ? 'checked' : ''}>倒尺</label><small class="reading-warning" hidden></small></div></div>
         <button type="button" data-add-next="${index}" class="primary record-next">記錄此點</button></div>` : ''}
       <details class="station-records"><summary>${setup.fsPointId ? `前視 ${safe(code(setup.fsPointId))} · ${safe(setup.fs)} m` : `本站已記錄 ${(setup.intermediate || []).length} 點`} · 點開核對</summary>
         <div class="reading-actions"><button type="button" data-field-map="${safe(setup.bsPointId)}">標註 ${safe(code(setup.bsPointId))}</button><button type="button" data-remove-station="${index}" class="quiet danger-text" title="刪除此站及後續站">刪除此站及後續站</button></div>${recorded}
-        <div class="station-distance"><label>測線長度（m，按距離分配時填）<input ${decimals} data-field="distance" data-station="${index}" value="${safe(setup.distance)}" placeholder="例如 35.0"></label>${correctionNote(index + 1, code(setup.fsPointId), 'distance')}</div>
+        <div class="station-distance"><label>測線長度（m，按距離分配時填）<input ${decimals} data-field="distance" data-station="${index}" value="${safe(setup.distance)}" placeholder="例如 35.0"></label>${correctionNote(index + 1, code(setup.fsPointId), 'distance', setup)}</div>
         <p class="wire-station-summary" data-wire-station="${index}" hidden></p><button type="button" data-copy-wire-distance="${index}" disabled>由後視距＋前視距帶入本站長度</button>
       </details>
     </section>`;
@@ -604,21 +651,21 @@ function closeFieldMap() {
 function resultRows(result) {
   const adjusted = result.adjusted;
   const output = [];
-  const shown = (value, inverted, station, field, pointCode) => {
-    const changes = project.auditLog.filter(item => item.type === 'edit' && item.station === station && item.field === field && item.pointCode === pointCode);
+  const shown = (value, inverted, station, field, pointCode, observation) => {
+    const changes = correctionEntries(project, station, pointCode, field, observation);
     const last = changes.at(-1);
     return `${last ? `<del title="原讀數">${safe(last.from)}</del> ` : ''}${readingLabel(value, inverted)}${last ? ' ※已更正' : ''}`;
   };
   result.stations.forEach((station, index) => {
-    if (index === 0) output.push(`<tr><td>${station.index}</td><td>${safe(code(station.bsPointId))}</td><td>${shown(station.bs, station.bsInverted, station.index, 'bs', code(station.bsPointId))}</td><td></td><td></td><td>${safe(dateTime(project.setups[index]?.bsAt).slice(11, 16))}</td><td>${formatHeight(station.rawStartHeight)}</td><td>${adjusted ? formatHeight(station.adjustedStartHeight) : '—'}</td><td>起點後視</td></tr>`);
+    if (index === 0) output.push(`<tr><td>${station.index}</td><td>${safe(code(station.bsPointId))}</td><td>${shown(station.bs, station.bsInverted, station.index, 'bs', code(station.bsPointId), project.setups[index])}</td><td></td><td></td><td>${safe(dateTime(project.setups[index]?.bsAt).slice(11, 16))}</td><td>${formatHeight(station.rawStartHeight)}</td><td>${adjusted ? formatHeight(station.adjustedStartHeight) : '—'}</td><td>起點後視</td></tr>`);
     for (const [sightIndex, sight] of station.intermediate.entries()) {
       const adjustedSight = station.adjustedIntermediate?.[sightIndex];
-      output.push(`<tr><td>${station.index}</td><td>${safe(code(sight.pointId))}</td><td></td><td></td><td>${shown(sight.value, sight.inverted, station.index, 'value', code(sight.pointId))}</td><td>${safe(dateTime(project.setups[index]?.intermediate[sightIndex]?.at).slice(11, 16))}</td><td>${formatHeight(sight.rawHeight)}</td><td>${adjusted ? formatHeight(adjustedSight?.adjustedHeight) : '—'}</td><td>中間視</td></tr>`);
+      output.push(`<tr><td>${station.index}</td><td>${safe(code(sight.pointId))}</td><td></td><td></td><td>${shown(sight.value, sight.inverted, station.index, 'value', code(sight.pointId), project.setups[index].intermediate[sightIndex])}</td><td>${safe(dateTime(project.setups[index]?.intermediate[sightIndex]?.at).slice(11, 16))}</td><td>${formatHeight(sight.rawHeight)}</td><td>${adjusted ? formatHeight(adjustedSight?.adjustedHeight) : '—'}</td><td>中間視</td></tr>`);
     }
     if (station.complete) {
       const next = result.stations[index + 1];
       const note = next ? '本點前視、搬站後同點後視' : project.setups[index + 1] ? '本點前視；搬站後同點後視待填' : station.fsPointId === project.route.endId ? '預定終點前視' : '本站前視，待搬站';
-      output.push(`<tr><td>${station.index}${next ? `→${next.index}` : ''}</td><td>${safe(code(station.fsPointId))}</td><td>${next ? shown(next.bs, next.bsInverted, next.index, 'bs', code(next.bsPointId)) : ''}</td><td>${shown(station.fs, station.fsInverted, station.index, 'fs', code(station.fsPointId))}</td><td></td><td>${safe([project.setups[index]?.fsAt, project.setups[index + 1]?.bsAt].map(value => dateTime(value).slice(11, 16)).filter(Boolean).join(' / '))}</td><td>${formatHeight(station.rawEndHeight)}</td><td>${adjusted ? formatHeight(station.adjustedEndHeight) : '—'}</td><td>${note}${adjusted ? `；本站改正 ${formatMm(station.correction * 1000)} mm` : ''}</td></tr>`);
+      output.push(`<tr><td>${station.index}${next ? `→${next.index}` : ''}</td><td>${safe(code(station.fsPointId))}</td><td>${next ? shown(next.bs, next.bsInverted, next.index, 'bs', code(next.bsPointId), project.setups[index + 1]) : ''}</td><td>${shown(station.fs, station.fsInverted, station.index, 'fs', code(station.fsPointId), project.setups[index])}</td><td></td><td>${safe([project.setups[index]?.fsAt, project.setups[index + 1]?.bsAt].map(value => dateTime(value).slice(11, 16)).filter(Boolean).join(' / '))}</td><td>${formatHeight(station.rawEndHeight)}</td><td>${adjusted ? formatHeight(station.adjustedEndHeight) : '—'}</td><td>${note}${adjusted ? `；本站改正 ${formatMm(station.correction * 1000)} mm` : ''}</td></tr>`);
     }
   });
   return output.join('');
@@ -646,7 +693,7 @@ function summaryMeta(result) {
 
 function summaryChecks(result) {
   const method = result.adjusted ? result.method === 'distance' ? '按各站長度分配' : '按測站數等分' : '未執行';
-  return `<span>ΣBS <strong>${formatHeight(result.sumBS)} m</strong></span><span>ΣFS <strong>${formatHeight(result.sumFS)} m</strong></span><span>閉合差 <strong>${formatMm(result.closureMm)} mm</strong></span><span>容許值 <strong>${result.toleranceMm === null ? '未指定' : `±${formatMm(result.toleranceMm)} mm`}</strong></span><span>改正 <strong>${method}</strong></span>`;
+  return `<span>ΣBS <strong>${formatHeight(result.sumBS)} m</strong></span><span>ΣFS <strong>${formatHeight(result.sumFS)} m</strong></span><span>閉合差 <strong>${formatMm(result.closureMm)} mm</strong></span><span>容許值 <strong>${result.toleranceMm === null ? '未指定' : `±${formatMm(result.toleranceMm)} mm`}</strong></span><span>改正 <strong>${method}</strong></span>${legacyCorrectionNotice(project) ? `<span>${safe(legacyCorrectionNotice(project))}</span>` : ''}`;
 }
 
 function arithmeticSummary(result) {
@@ -805,7 +852,12 @@ async function renderPhotos() {
   }
 }
 
-async function addImage(file, usage) {
+function addImage(file, usage) {
+  const input = { pointId: $('#photoPoint').value, photoDescription: $('#photoDescription').value.trim(), equipmentDescription: $('#equipmentDescription').value.trim(), photographer: project.photographer.trim(), instrument: project.instrument.trim() };
+  return enqueueMedia(owner => addImageNow(file, usage, owner, input));
+}
+
+async function addImageNow(file, usage, project, input) {
   if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
     notify('請選擇 JPG、PNG 或 WebP 圖片。', true); return;
   }
@@ -839,16 +891,16 @@ async function addImage(file, usage) {
       }
     } else if (usage === 'equipment') {
       const addedAt = stamp();
-      project.equipmentPhotos.push({ id: uid(), instrument: project.instrument.trim() || '未填儀器型號', mediaId: id, name: file.name, description: $('#equipmentDescription').value.trim(), addedAt, ...await captureTime(file, addedAt) });
+      project.equipmentPhotos.push({ id: uid(), instrument: input.instrument || '未填儀器型號', mediaId: id, name: file.name, description: input.equipmentDescription, addedAt, ...await captureTime(file, addedAt) });
       $('#equipmentDescription').value = '';
       await renderPhotos();
       queueSave(true);
       notify('本案設備照片已保存，並與點位照片分開。');
     } else {
-      const pointId = $('#photoPoint').value;
+      const pointId = input.pointId;
       if (!point(pointId)) { await deleteMedia(id); notify('請先選擇照片對應點位。', true); return; }
       const addedAt = stamp();
-      project.photos.push({ id: uid(), pointId, mediaId: id, name: file.name, description: $('#photoDescription').value.trim(), photographer: project.photographer.trim(), addedAt, ...await captureTime(file, addedAt) });
+      project.photos.push({ id: uid(), pointId, mediaId: id, name: file.name, description: input.photoDescription, photographer: input.photographer, addedAt, ...await captureTime(file, addedAt) });
       $('#photoDescription').value = '';
       await renderPhotos();
       queueSave(true);
@@ -907,6 +959,7 @@ async function verifyBackup(file) {
 }
 
 async function exportBackup(share = false) {
+  await mediaQueue;
   const target = project;
   const previousExportedAt = target.lastExportedAt;
   const exportedAt = stamp();
@@ -976,6 +1029,7 @@ async function confirmReplacement(alwaysConfirm = false) {
 }
 
 async function exportPhotoWork(kind, share = false) {
+  await mediaQueue;
   try {
     const workProject = structuredClone(project);
     if (kind === 'task') {
@@ -996,7 +1050,11 @@ async function exportPhotoWork(kind, share = false) {
   } catch (error) { notify(`匯出失敗：${error.message}`, true); }
 }
 
-async function mergePhotoBackup(file) {
+function mergePhotoBackup(file) {
+  return enqueueMedia(() => mergePhotoBackupNow(file));
+}
+
+async function mergePhotoBackupNow(file) {
   if (!file) return;
   try {
     const incoming = parseBackup(await file.text());
@@ -1073,19 +1131,21 @@ async function importBackup(file, alwaysConfirm = false) {
   try {
     const contents = await file.text();
     const restored = parseBackup(contents);
-    if (!await confirmReplacement(alwaysConfirm)) return;
-    clearTimeout(saveTimer);
-    await saveQueue;
-    await replaceProject(restored.project, restored.media);
-    clearUndo();
-    project = restored.project;
-    resetNextDraft();
-    if (normalizeProject()) queueSave(true);
-    revokePhotos();
-    renderAll();
-    if (project.photoTaskMode) switchTab('photos');
-    notify('案件檔已開啟，請核對點位圖、讀數及照片。');
-    return true;
+    normalizeProject(restored.project);
+    return await transitionCase(async () => {
+      if (!await confirmReplacement(alwaysConfirm)) return false;
+      clearTimeout(saveTimer);
+      await saveQueue;
+      await replaceProject(restored.project, restored.media);
+      clearUndo();
+      project = restored.project;
+      resetNextDraft();
+      revokePhotos();
+      renderAll();
+      if (project.photoTaskMode) switchTab('photos');
+      notify('案件檔已開啟，請核對點位圖、讀數及照片。');
+      return true;
+    });
   } catch (error) { notify(`開啟失敗：${error.message}`, true); return false; }
 }
 
@@ -1253,6 +1313,7 @@ function bindInputs() {
     }
   });
   document.addEventListener('input', event => {
+    if (caseTransition) { event.stopImmediatePropagation(); return; }
     const target = event.target;
     if (target.id === 'pointSearch') { renderPointPicker(); return; }
     if (target.id === 'nextReading') clearUndo();
@@ -1327,11 +1388,14 @@ function bindInputs() {
       if (!proposed || project.points.some(other => other.id !== item.id && other.code.toUpperCase() === proposed.toUpperCase())) {
         target.value = item.code; notify('點號不可空白或重複。', true); return;
       }
+      if (item.code === proposed) return;
+      project.auditLog.push({ id: uid(), at: stamp(), type: 'rename-point', station: '—', pointId: item.id, pointCode: item.code, field: '點號', from: item.code, to: proposed, reason: '點號更名' });
       item.code = proposed;
       renderPoints(); renderStations(); renderPhotos(); queueSave(true);
     }
   });
   document.addEventListener('change', async event => {
+    if (caseTransition) { event.stopImmediatePropagation(); return; }
     const target = event.target;
 
     if (isReadingInput(target)) {
@@ -1349,7 +1413,7 @@ function bindInputs() {
         event.stopImmediatePropagation(); editPending = true;
         const reason = await editReason(`第 ${stationIndex + 1} 站 ${code(sightIndex === null ? item[key === 'bsInverted' ? 'bsPointId' : 'fsPointId'] : item.pointId)}：${item[key] ? '倒尺' : '正立尺'} → ${target.checked ? '倒尺' : '正立尺'}`);
         if (reason) {
-          logAction('edit', stationIndex + 1, code(sightIndex === null ? item[key === 'bsInverted' ? 'bsPointId' : 'fsPointId'] : item.pointId), key, item[key] ? '倒尺' : '正立尺', target.checked ? '倒尺' : '正立尺', reason);
+          logAction('edit', stationIndex + 1, code(sightIndex === null ? item[key === 'bsInverted' ? 'bsPointId' : 'fsPointId'] : item.pointId), key, item[key] ? '倒尺' : '正立尺', target.checked ? '倒尺' : '正立尺', reason, observationIdentity(item, key, sightIndex === null ? item[key === 'bsInverted' ? 'bsPointId' : 'fsPointId'] : item.pointId));
           item[key] = target.checked; renderStations(); queueSave(true);
         } else target.checked = !!item[key];
         editPending = false; return;
@@ -1378,7 +1442,10 @@ function bindInputs() {
     if (result.accepted) {
       address.item[address.key] = result.value;
       if (pointField) { result.entry.from = code(from); result.entry.to = code(to); }
-      project.auditLog.push(result.entry);
+      if (result.entry) {
+        Object.assign(result.entry, observationIdentity(address.item, address.key, address.item.pointId || address.item[address.key.startsWith('bs') ? 'bsPointId' : 'fsPointId']));
+        project.auditLog.push(result.entry);
+      }
       initialEntries.get(address.item)?.delete(address.key);
       renderStations(); queueSave(true);
     } else { target.value = from; updateReadingWarning(target); }
@@ -1387,7 +1454,7 @@ function bindInputs() {
 }
 
 function bindActions() {
-  document.addEventListener('click', event => {
+  document.addEventListener('click', async event => {
     const target = event.target.closest('button');
     if (!target) return;
     if (target.dataset.tab) { switchTab(target.dataset.tab); return; }
@@ -1397,8 +1464,20 @@ function bindActions() {
       if (station?.bsDistanceM === null || station?.fsDistanceM === null || !station) return;
       const current = String(project.setups[index].distance ?? '').trim();
       const measured = formatHeight(station.bsDistanceM + station.fsDistanceM);
-      if (current && !confirm(`本站原測線長度為 ${current} m；改由三絲視距帶入 ${measured} m？`)) return;
-      project.setups[index].distance = measured;
+      if (current && Number(current.replace(',', '.')) === Number(measured)) return;
+      const owner = project;
+      const setup = owner.setups[index];
+      if (current) {
+        if (editPending || caseTransition) return;
+        editPending = true;
+        let reason;
+        try { reason = await editReason(`第 ${index + 1} 站 測線長度：${current} m → ${measured} m（三絲視距帶入）`); } finally { editPending = false; }
+        if (project !== owner) return;
+        const edit = resolveObservedEdit({ from: current, to: measured, reason, station: index + 1, pointCode: code(setup.fsPointId), field: 'distance', at: stamp(), id: uid() });
+        if (!edit.accepted) return;
+        if (edit.entry) { Object.assign(edit.entry, observationIdentity(setup, 'distance', setup.fsPointId)); project.auditLog.push(edit.entry); }
+      }
+      setup.distance = measured;
       const input = $(`[data-field="distance"][data-station="${index}"]`);
       if (input) input.value = measured;
       updateWireFeedback(renderResult()); queueSave(true); return;
@@ -1446,9 +1525,9 @@ function bindActions() {
       if (role === 'MOVE' && pointId === project.route.endId) { notify('已到預定終點，請選「終點前視」。', true); return; }
       if (role === 'IS' && pointId === project.route.endId) { notify('預定終點應記為前視 FS。', true); return; }
       if (role === 'MOVE' || role === 'FINISH') {
-        setup.fsPointId = pointId; setup.fs = value; setup.fsInverted = draftNextInverted; setup.fsAt = stamp(); updateEnvironmentTimes(setup.fsAt);
+        setup.fsPointId = pointId; setup.fs = value; setup.fsObservationId = uid(); setup.fsInverted = draftNextInverted; setup.fsAt = stamp(); updateEnvironmentTimes(setup.fsAt);
         if (role === 'MOVE') project.setups.push({ bsPointId: pointId, bs: '', intermediate: [], fsPointId: '', fs: '', distance: '' });
-      } else { const at = stamp(); setup.intermediate.push({ pointId, value, inverted: draftNextInverted, at }); updateEnvironmentTimes(at); }
+      } else { const at = stamp(); setup.intermediate.push({ pointId, value, observationId: uid(), inverted: draftNextInverted, at }); updateEnvironmentTimes(at); }
       resetNextDraft();
       renderStations(); queueSave(true);
       const height = role === 'IS' ? calculate(project).stations[index]?.intermediate.at(-1)?.rawHeight : calculate(project).stations[index]?.rawEndHeight;
@@ -1460,22 +1539,24 @@ function bindActions() {
       const [station, sight] = parsePair(target.dataset.convertIs);
       const setup = project.setups[station];
       if (station !== project.setups.length - 1 || sight !== setup.intermediate.length - 1 || setup.fsPointId) return;
+      ensureObservationId(setup.intermediate[sight], 'value', uid);
       pushUndo('中間視改為前視', station + 1, code(setup.intermediate[sight].pointId), 'role', 'IS', 'FS');
       const reading = setup.intermediate.pop();
-      setup.fsPointId = reading.pointId; setup.fs = reading.value; setup.fsInverted = !!reading.inverted;
+      setup.fsPointId = reading.pointId; setup.fs = reading.value; setup.fsObservationId = reading.observationId; setup.fsInverted = !!reading.inverted;
       setup.fsAt = reading.at; setup.fsUpper = reading.upper || ''; setup.fsLower = reading.lower || ''; setup.fsUpperAt = reading.upperAt; setup.fsLowerAt = reading.lowerAt;
-      logAction('convert', station + 1, code(reading.pointId), 'role', 'IS', 'FS', '觀測角色轉換');
+      logAction('convert', station + 1, code(reading.pointId), 'role', 'IS', 'FS', '觀測角色轉換', { observationId: reading.observationId, pointId: reading.pointId });
       renderStations(); queueSave(true, true, true); return;
     }
     if (target.dataset.convertFs !== undefined) {
       const index = Number(target.dataset.convertFs);
       if (index !== project.setups.length - 1) return;
       const setup = project.setups[index];
+      ensureObservationId(setup, 'fs', uid);
       pushUndo('前視改為中間視', index + 1, code(setup.fsPointId), 'role', 'FS', 'IS');
-      setup.intermediate.push({ pointId: setup.fsPointId, value: setup.fs, inverted: !!setup.fsInverted, at: setup.fsAt, upper: setup.fsUpper || '', lower: setup.fsLower || '', upperAt: setup.fsUpperAt, lowerAt: setup.fsLowerAt });
-      logAction('convert', index + 1, code(setup.fsPointId), 'role', 'FS', 'IS', '觀測角色轉換');
+      setup.intermediate.push({ pointId: setup.fsPointId, value: setup.fs, observationId: setup.fsObservationId, inverted: !!setup.fsInverted, at: setup.fsAt, upper: setup.fsUpper || '', lower: setup.fsLower || '', upperAt: setup.fsUpperAt, lowerAt: setup.fsLowerAt });
+      logAction('convert', index + 1, code(setup.fsPointId), 'role', 'FS', 'IS', '觀測角色轉換', { observationId: setup.fsObservationId, pointId: setup.fsPointId });
       setup.fsPointId = ''; setup.fs = ''; setup.fsInverted = false; setup.fsUpper = ''; setup.fsLower = '';
-      setup.fsAt = ''; setup.fsUpperAt = ''; setup.fsLowerAt = '';
+      setup.fsAt = ''; setup.fsUpperAt = ''; setup.fsLowerAt = ''; delete setup.fsObservationId;
       renderStations(); queueSave(true, true, true); return;
     }
     if (target.dataset.addIs !== undefined) {
@@ -1485,8 +1566,9 @@ function bindActions() {
     if (target.dataset.removeIs) {
       const [station, sight] = parsePair(target.dataset.removeIs);
       const previous = project.setups[station].intermediate[sight];
+      ensureObservationId(previous, 'value', uid);
       pushUndo('已移除中間視', station + 1, code(previous.pointId), 'is', previous.value, '');
-      logAction('delete', station + 1, code(previous.pointId), 'is', previous.value, '', '移除中間視');
+      logAction('delete', station + 1, code(previous.pointId), 'is', previous.value, '', '移除中間視', { observationId: previous.observationId, pointId: previous.pointId });
       project.setups[station].intermediate.splice(sight, 1);
       renderStations(); queueSave(true, true, true); return;
     }
@@ -1650,15 +1732,16 @@ function bindActions() {
   $('#mergePhotoBackup').onchange = event => { mergePhotoBackup(event.target.files[0]); event.target.value = ''; };
   $('#loadTestCase').onclick = loadTestCase;
   $('#importBackup').onchange = event => { importBackup(event.target.files[0]); event.target.value = ''; };
-  $('#newCase').onclick = async () => {
-    if (!await confirmReplacement()) return;
-    clearTimeout(saveTimer); await saveQueue;
-    project = blankProject();
-    resetNextDraft();
-    await replaceProject(project, []);
-    clearUndo();
+  $('#newCase').onclick = () => transitionCase(async () => {
+    if (!await confirmReplacement()) return false;
+    await persistCurrentCase();
+    const candidate = blankProject();
+    await replaceProject(candidate, []);
+    project = candidate;
+    resetNextDraft(); clearUndo();
     revokePhotos(); renderAll(); switchTab('route'); notify('已建立新案件。');
-  };
+    return true;
+  });
   $('#printReport').onclick = () => preparePreview('report');
   $('#printSummary').onclick = () => preparePreview('summary');
   $('#closePreview').onclick = closePreview;
@@ -1682,6 +1765,7 @@ function fitPreview() {
 }
 
 async function preparePreview(kind) {
+  await mediaQueue;
   const button = kind === 'summary' ? $('#printSummary') : $('#printReport');
   const label = button.textContent;
   button.disabled = true;
@@ -1836,7 +1920,7 @@ async function buildReportPreview() {
     <h2>三、點位照片</h2>${photos || '<p>未附點位照片。</p>'}
     <h2>四、儀器檢校與設備照片</h2>${calibration}${referenceEquipmentPhoto}${equipmentPhotos}${referenceEquipmentPhoto || equipmentPhotos ? '' : '<p>未附設備照片。</p>'}
     <h2>五、開工前檢核</h2><table><thead><tr><th>項目</th><th>紀錄狀態</th></tr></thead><tbody>${project.checklist.items.map(item => `<tr><td>${safe(item.label)}</td><td>${safe({ done: '已執行', pending: '未執行', na: '不適用' }[item.status] || '未選')}</td></tr>`).join('')}</tbody></table><p>檢核備註：${safe(project.checklist.notes || '未填')}</p>
-    <h2>六、讀數更正與操作紀錄</h2>${project.auditLog.length ? `<table><thead><tr><th>時間</th><th>測站／點位</th><th>欄位</th><th>原值</th><th>新值</th><th>原因</th></tr></thead><tbody>${project.auditLog.map(auditReportEntry).map(item => `<tr><td>${safe(dateTime(item.at))}</td><td>第 ${safe(item.station)} 站／${safe(item.pointCode)}</td><td>${safe(item.field)}</td><td><del>${safe(item.from)}</del></td><td>${safe(item.to)}</td><td>${safe(item.reason)}</td></tr>`).join('')}</tbody></table>` : '<p>無更正紀錄。</p>'}
+    <h2>六、讀數更正與操作紀錄</h2>${legacyCorrectionNotice(project) ? `<p class="print-note">${safe(legacyCorrectionNotice(project))}</p>` : ''}${project.auditLog.length ? `<table><thead><tr><th>時間</th><th>測站／點位</th><th>欄位</th><th>原值</th><th>新值</th><th>原因</th></tr></thead><tbody>${project.auditLog.map(auditReportEntry).map(item => `<tr><td>${safe(dateTime(item.at))}</td><td>第 ${safe(item.station)} 站／${safe(item.pointCode)}</td><td>${safe(item.field)}</td><td><del>${safe(item.from)}</del></td><td>${safe(item.to)}</td><td>${safe(item.reason)}</td></tr>`).join('')}</tbody></table>` : '<p>無更正紀錄。</p>'}
     <footer>列印時間：${safe(new Date().toLocaleString('zh-TW'))}｜來源工具：水準測量現場紀錄 V${VERSION}｜資料指紋 SHA-256：${hash.slice(0, 16)}…<br>完整指紋：${hash}</footer>`;
   $('#printPanel')?.remove();
   $('#previewSheet').append(report);

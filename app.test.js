@@ -3,6 +3,24 @@ import assert from 'node:assert/strict';
 import { appHarness } from './checks/app-harness.js';
 import { readFileSync } from 'node:fs';
 
+test('Drive handoff links use the shared folder and open a protected new tab', () => {
+  const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const markup = [...html.matchAll(/<a\b[^>]*\bdata-handoff-folder\b[^>]*>[^<]*<\/a>/g)];
+  assert.equal(markup.length, 2);
+  for (const [link] of markup) {
+    assert.match(link, /target="_blank"/);
+    assert.match(link, /rel="noopener noreferrer"/);
+    assert.match(link, />開啟共用雲端資料夾 ↗<\/a>$/);
+  }
+  const links = markup.map(() => ({}));
+  const h = appHarness();
+  h.context.document.querySelectorAll = selector => selector === '[data-handoff-folder]' ? links : [];
+  h.run('project = blankProject(); bindActions()');
+  const folderUrl = h.run('HANDOFF_FOLDER_URL');
+  assert.equal(folderUrl, 'https://drive.google.com/drive/folders/1jwhulKJvNKLTRFoA1a5rw-PKIN9_5g7J');
+  assert.ok(links.every(link => link.href === folderUrl));
+});
+
 function caseWithReading() {
   const h = appHarness();
   h.run(`project = blankProject();

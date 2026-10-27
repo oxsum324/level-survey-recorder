@@ -13,6 +13,8 @@ const validPosition = value => value && Number.isFinite(value.x) && Number.isFin
 const decimals = 'type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off"';
 const validReading = value => /^\d+(?:[.,]\d{1,5})?$/.test(String(value ?? '').trim());
 const DEFAULT_INSTRUMENT = 'PENTAX AP-128';
+// 更換共用雲端資料夾時，只需替換下方網址。
+const HANDOFF_FOLDER_URL = 'https://drive.google.com/drive/folders/1jwhulKJvNKLTRFoA1a5rw-PKIN9_5g7J';
 const DEMO_WARNING = '本案為合成測試資料，不得作為工程成果';
 let demoModeEnabled = false;
 
@@ -1701,6 +1703,7 @@ function bindActions() {
   $('#photoGallery').onchange = event => { addImage(event.target.files[0], 'photo'); event.target.value = ''; };
   $('#equipmentFile').onchange = event => { addImage(event.target.files[0], 'equipment'); event.target.value = ''; };
   $('#equipmentGallery').onchange = event => { addImage(event.target.files[0], 'equipment'); event.target.value = ''; };
+  for (const link of document.querySelectorAll('[data-handoff-folder]')) link.href = HANDOFF_FOLDER_URL;
   $('#exportBackup').onclick = () => exportBackup();
   $('#exportBackup2').onclick = () => exportBackup();
   $('#shareBackup').onclick = () => exportBackup(true);

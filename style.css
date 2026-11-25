@@ -445,3 +445,16 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .save-state-group{display:flex;align-items:center;gap:4px;white-space:nowrap}
 .demo-badge{display:inline-block;background:var(--warn);color:var(--ink);padding:1px 5px;border-radius:99px;font-size:12px;font-weight:700;line-height:18px}
 @media(max-width:640px){.save-state-group{grid-row:1;grid-column:2;justify-self:end}html.demo-case .topbar #offlineState{justify-self:start;max-width:90px}}
+
+/* FW-04: 外業觀測 / 內業整編雙模式與桌機左表右預覽工作台 */
+.workspace-mode-bar{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:8px;background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25)}
+.workspace-mode-bar button{min-height:30px;padding:.2rem .55rem;border:0;border-radius:6px;background:transparent;color:#fff;font-size:.76rem}
+.workspace-mode-bar button[aria-pressed="true"]{background:#fff;color:var(--brand)}
+body.workspace-field [data-field-secondary="1"]{opacity:.85}
+body.workspace-field #routePanel .card[data-field-secondary="1"]:not(details){display:none}
+@media(max-width:640px){.workspace-mode-bar{grid-row:2;grid-column:1 / -1;justify-self:start;margin-top:4px}}
+@media(min-width:1240px){
+  body.workspace-office main{max-width:min(1760px,96vw);display:grid;grid-template-columns:minmax(0,1.08fr) minmax(430px,0.92fr);gap:1.25rem;align-items:start}
+  body.workspace-office .tab-panel:not(#resultPanel){grid-column:1}
+  body.workspace-office #resultPanel{display:block!important;grid-column:2;grid-row:1;position:sticky;top:60px;max-height:calc(100dvh - 76px);overflow-y:auto;padding-right:4px}
+}

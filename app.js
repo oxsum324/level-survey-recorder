@@ -960,6 +960,84 @@ async function verifyBackup(file) {
   } catch (error) { $('#fingerprintResult').textContent = `驗證失敗：${error.message}`; }
 }
 
+function standardBackupName(target = project) {
+  const clean = value => String(value ?? '').trim().replace(/[\\/:*?"<>|]/g, '_');
+  const base = clean(target.number || target.name) || 'level';
+  const unit = clean(target.householdNo) || '全案';
+  const date = clean(target.date) || new Date().toISOString().slice(0, 10);
+  return `${base}_${unit}_${date}_level.json`;
+}
+
+function parseCaseSeedPayload(raw) {
+  let seed;
+  try { seed = JSON.parse(raw); } catch { throw new Error('派案種子檔案不是有效的 JSON 格式。'); }
+  if (!seed || seed.format !== 'field-case-seed.v1') throw new Error('不支援的派案種子格式（須為 field-case-seed.v1）。');
+  const caseCode = String(seed.caseCode || seed.caseNumber || '').trim();
+  const caseName = String(seed.caseName || caseCode || '').trim();
+  if (!caseCode && !caseName) throw new Error('派案種子缺少案號或案件名稱。');
+  const units = Array.isArray(seed.units) ? seed.units.map(item => ({
+    code: String(item?.code || '').trim(),
+    address: String(item?.address || '').trim(),
+  })).filter(item => item.code) : [];
+  return {
+    caseCode,
+    caseNumber: String(seed.caseNumber || seed.caseCode || '').trim(),
+    caseName,
+    orgName: String(seed.orgName || '').trim(),
+    address: String(seed.address || units[0]?.address || '').trim(),
+    surveyDate: /^\d{4}-\d{2}-\d{2}$/.test(String(seed.surveyDate || '')) ? seed.surveyDate : new Date().toISOString().slice(0, 10),
+    units,
+  };
+}
+
+function renderSeedHouseholds() {
+  const list = $('#seedHouseholds');
+  if (!list || !project) return;
+  let units = [];
+  try { units = JSON.parse(localStorage.getItem(`level-survey-seed-units:${project.id}`) || '[]'); } catch { units = []; }
+  list.innerHTML = units.map(item => `<option value="${safe(item.code)}">${item.address ? safe(item.address) : ''}</option>`).join('');
+}
+
+function applyWorkspaceMode(mode) {
+  const normalized = mode === 'field' || mode === 'office' ? mode : 'auto';
+  document.body.classList.toggle('workspace-field', normalized === 'field');
+  document.body.classList.toggle('workspace-office', normalized === 'office');
+  writePreference('level-survey-workspace-mode', normalized);
+  $('#modeFieldBtn')?.setAttribute('aria-pressed', String(normalized === 'field'));
+  $('#modeOfficeBtn')?.setAttribute('aria-pressed', String(normalized === 'office'));
+}
+
+async function importCaseSeed(file) {
+  if (!file) return false;
+  try {
+    const seed = parseCaseSeedPayload(await file.text());
+    return await transitionCase(async () => {
+      if (!await confirmReplacement(false)) return false;
+      clearTimeout(saveTimer);
+      await saveQueue;
+      const candidate = blankProject();
+      candidate.name = seed.caseName;
+      candidate.number = seed.caseNumber;
+      candidate.orgName = seed.orgName;
+      candidate.address = seed.address;
+      candidate.date = seed.surveyDate;
+      try { localStorage.setItem(`level-survey-seed-units:${candidate.id}`, JSON.stringify(seed.units)); } catch {}
+      await replaceProject(candidate, []);
+      clearUndo();
+      project = candidate;
+      resetNextDraft();
+      revokePhotos();
+      renderAll();
+      switchTab('route');
+      notify(`已由派案種子開案（${seed.units.length} 筆戶別可供快選；全棟測量可將戶別留空）。`);
+      return true;
+    });
+  } catch (error) {
+    notify(`派案種子載入失敗：${error.message}`, true);
+    return false;
+  }
+}
+
 async function exportBackup(share = false) {
   await mediaQueue;
   const target = project;
@@ -969,7 +1047,7 @@ async function exportBackup(share = false) {
   try {
     target.lastExportedAt = exportedAt;
     const backup = await makeBackup(structuredClone(target), { onEstimate: showBackupEstimate });
-    const name = `${(project.number || project.name || '水準測量').replace(/[\\/:*?"<>|]/g, '_')}_水準測量案件_${new Date().toISOString().slice(0, 10)}.json`;
+    const name = standardBackupName(target);
     if (!await deliverFile(name, backup, share)) return false;
     delivered = true;
     if (project === target) queueSave(true, false);
@@ -1232,7 +1310,7 @@ function renderAll() {
   renderTwoPegResult();
   $('#mapSource').value = project.mapSource || '';
   $('#fieldMapSource').value = project.mapSource || '';
-  renderPointPlan(); renderPoints(); renderMap(); renderStations(); renderPhotos(); renderChecklist(); renderEnvironment(); updateExportState();
+  renderPointPlan(); renderPoints(); renderMap(); renderStations(); renderPhotos(); renderChecklist(); renderEnvironment(); renderSeedHouseholds(); updateExportState();
 }
 
 function renderTwoPegResult() {
@@ -1706,6 +1784,14 @@ function bindActions() {
   for (const link of document.querySelectorAll('[data-handoff-folder]')) link.href = HANDOFF_FOLDER_URL;
   $('#exportBackup').onclick = () => exportBackup();
   $('#exportBackup2').onclick = () => exportBackup();
+  $('#copyBackupName').onclick = async () => {
+    const name = standardBackupName(project);
+    try { await navigator.clipboard.writeText(name); notify(`已複製標準檔名：${name}`); }
+    catch { notify(`標準檔名：${name}`); }
+  };
+  $('#importSeed').onchange = event => { importCaseSeed(event.target.files[0]); event.target.value = ''; };
+  $('#modeFieldBtn').onclick = () => applyWorkspaceMode(document.body.classList.contains('workspace-field') ? 'auto' : 'field');
+  $('#modeOfficeBtn').onclick = () => applyWorkspaceMode(document.body.classList.contains('workspace-office') ? 'auto' : 'office');
   $('#shareBackup').onclick = () => exportBackup(true);
   const exportCsv = async share => {
     const rawCsv = buildSummaryCsv(project);
@@ -1947,6 +2033,7 @@ async function main() {
     const sunlight = readPreference('level-survey-sunlight', '0') === '1';
     document.documentElement.classList.toggle('sunlight', sunlight);
     $('#sunlightToggle').setAttribute('aria-pressed', String(sunlight));
+    applyWorkspaceMode(readPreference('level-survey-workspace-mode', 'auto'));
     $('#wakeLockToggle').checked = readPreference('level-survey-wake-lock', '1') !== '0';
     for (const id of ['shareBackup', 'sharePhotoTask', 'sharePhotoResult', 'shareCsv']) $(`#${id}`).hidden = !canShareFile();
     updateOnlineState(); updateWakeLock();

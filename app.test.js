@@ -536,3 +536,35 @@ test('E3 both report headers omit empty identity fields and escape populated val
     }
   }
 });
+
+test('FW-04 standardBackupName, parseCaseSeedPayload, and workspace mode preserve project fingerprint', async () => {
+  const h = caseWithReading();
+  assert.equal(
+    h.run(`standardBackupName({ number: '115/T01', householdNo: 'A-01', date: '2026-11-25' })`),
+    '115_T01_A-01_2026-11-25_level.json',
+  );
+  assert.equal(
+    h.run(`standardBackupName({ number: '115-T02', householdNo: '', date: '2026-11-25' })`),
+    '115-T02_全案_2026-11-25_level.json',
+  );
+  const parsed = h.run(`parseCaseSeedPayload(JSON.stringify({
+    format: 'field-case-seed.v1',
+    caseCode: '115-01',
+    caseNumber: '115-T01',
+    caseName: '鄰損水準案',
+    orgName: '弘一工程顧問',
+    surveyDate: '2026-11-25',
+    units: [{ code: 'A01', address: '測試路 1 號' }, { code: '', address: '空白略過' }],
+  }))`);
+  assert.equal(parsed.caseNumber, '115-T01');
+  assert.equal(parsed.units.length, 1);
+  assert.equal(parsed.units[0].code, 'A01');
+  assert.throws(() => h.run(`parseCaseSeedPayload('{"format":"unknown"}')`), /field-case-seed\.v1/);
+  const beforeFp = await h.run('fingerprint(project)');
+  h.run(`document.body.classList = { _s: new Set(), toggle(c, on) { if (on) this._s.add(c); else this._s.delete(c); }, contains(c) { return this._s.has(c); } };`);
+  h.run(`applyWorkspaceMode('field')`);
+  assert.equal(h.run(`document.body.classList.contains('workspace-field')`), true);
+  h.run(`applyWorkspaceMode('office')`);
+  assert.equal(h.run(`document.body.classList.contains('workspace-office')`), true);
+  assert.equal(await h.run('fingerprint(project)'), beforeFp);
+});
